@@ -24,7 +24,7 @@ import com.netflix.appinfo.InstanceInfo;
  *
  * @author Karthik Ranganathan, Greg Kim.
  * @param <T> for backward compatibility
-
+ *           代表具备 发现服务功能的接口
  */
 public interface LookupService<T> {
 
@@ -35,6 +35,7 @@ public interface LookupService<T> {
      * @param appName
      * @return a {@link Application} or null if we couldn't locate any app of
      *         the requested appName
+     *         从所有注册在容器中的应用中 获取指定应用
      */
     Application getApplication(String appName);
 
@@ -43,6 +44,7 @@ public interface LookupService<T> {
      * all currently registered {@link Application}s.
      *
      * @return {@link Applications}
+     *          获取所有 注册在容器中的应用
      */
     Applications getApplications();
 
@@ -54,6 +56,7 @@ public interface LookupService<T> {
      * @param id
      * @return {@link List} of {@link InstanceInfo}s or
      *         {@link java.util.Collections#emptyList()}
+     *         根据 id 直接获取到实例列表
      */
     List<InstanceInfo> getInstancesById(String id);
 
@@ -82,6 +85,8 @@ public interface LookupService<T> {
      *         host name of the next server in line to process the request based
      *         on the round-robin algorithm.
      * @throws java.lang.RuntimeException if the virtualHostname does not exist
+     *          获取下一个注册中心实例 因为每个注册中心也是作为服务注册到其他注册中心的 这里应该是从当前维护的全部服务中找寻到下个注册中心 并从下个注册中心找到对应的服务实例
+     *          (或者 就是返回关于下个注册中心的实例信息)
      */
     InstanceInfo getNextServerFromEureka(String virtualHostname, boolean secure);
 }

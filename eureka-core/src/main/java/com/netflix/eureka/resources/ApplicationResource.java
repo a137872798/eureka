@@ -53,6 +53,9 @@ import org.slf4j.LoggerFactory;
 public class ApplicationResource {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationResource.class);
 
+    /**
+     * 应用名
+     */
     private final String appName;
     private final EurekaServerConfig serverConfig;
     private final PeerAwareInstanceRegistry registry;
@@ -138,13 +141,16 @@ public class ApplicationResource {
      * @param isReplication
      *            a header parameter containing information whether this is
      *            replicated from other nodes.
+     *            通过POST 方式进行请求 允许接收 application/json 以及 application/xml 格式
      */
     @POST
     @Consumes({"application/json", "application/xml"})
     public Response addInstance(InstanceInfo info,
+                                //从请求头中获取 参数 判断是否是 复制 这里的复制指的是什么???
                                 @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication) {
         logger.debug("Registering instance {} (replication={})", info.getId(), isReplication);
         // validate that the instanceinfo contains all the necessary required fields
+        // 必要参数校验
         if (isBlank(info.getId())) {
             return Response.status(400).entity("Missing instanceId").build();
         } else if (isBlank(info.getHostName())) {
@@ -162,6 +168,7 @@ public class ApplicationResource {
         }
 
         // handle cases where clients may be registering with bad DataCenterInfo with missing data
+        // 获取数据中心
         DataCenterInfo dataCenterInfo = info.getDataCenterInfo();
         if (dataCenterInfo instanceof UniqueIdentifier) {
             String dataCenterInfoId = ((UniqueIdentifier) dataCenterInfo).getId();
@@ -182,7 +189,9 @@ public class ApplicationResource {
             }
         }
 
+        //这是 eurekaServer ??? 这里接收了 eurekaClient 发来的请求
         registry.register(info, "true".equals(isReplication));
+        //将状态码204 返回 那么 如果出了异常是在哪里处理呢
         return Response.status(204).build();  // 204 to be backwards compatible
     }
 

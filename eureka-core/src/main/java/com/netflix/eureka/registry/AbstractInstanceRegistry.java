@@ -75,6 +75,9 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     private static final Logger logger = LoggerFactory.getLogger(AbstractInstanceRegistry.class);
 
     private static final String[] EMPTY_STR_ARRAY = new String[0];
+    /**
+     * 注册中心存放 服务实例的容器  第一级 key 是应用名 第二级应该是 以id 作为key 之类的
+     */
     private final ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
             = new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
     protected Map<String, RemoteRegionRegistry> regionNameVSRemoteRegistry = new HashMap<String, RemoteRegionRegistry>();
@@ -187,37 +190,53 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * Registers a new instance with a given duration.
      *
      * @see com.netflix.eureka.lease.LeaseManager#register(java.lang.Object, int, boolean)
+     *
+     *      根据时间间隔进行注册
      */
+    @Override
     public void register(InstanceInfo registrant, int leaseDuration, boolean isReplication) {
         try {
+            //使用读锁上锁 这时 就无法进行修改操作
             read.lock();
+            //注册中心内部是 一个二级map
             Map<String, Lease<InstanceInfo>> gMap = registry.get(registrant.getAppName());
+            //处理计数器
             REGISTER.increment(isReplication);
+            //如果对应的应用名没有找到 服务对象 就创建一个新的容器
             if (gMap == null) {
                 final ConcurrentHashMap<String, Lease<InstanceInfo>> gNewMap = new ConcurrentHashMap<String, Lease<InstanceInfo>>();
+                //这里是有可能发生并发的 所以是 putIfAbsend 如果获取到了 对象就代表被别的线程先添加了 猜测内部使用了 volatile
                 gMap = registry.putIfAbsent(registrant.getAppName(), gNewMap);
                 if (gMap == null) {
                     gMap = gNewMap;
                 }
             }
+            //二级key 是 id 能够定义到唯一的 服务  id 是什么时候生成的???
             Lease<InstanceInfo> existingLease = gMap.get(registrant.getId());
             // Retain the last dirty timestamp without overwriting it, if there is already a lease
+            // 如果该服务已经注册
             if (existingLease != null && (existingLease.getHolder() != null)) {
+                //获取 生成脏数据的时间戳
                 Long existingLastDirtyTimestamp = existingLease.getHolder().getLastDirtyTimestamp();
+                //获取此次 注册信息的 脏时间戳
                 Long registrationLastDirtyTimestamp = registrant.getLastDirtyTimestamp();
                 logger.debug("Existing lease found (existing={}, provided={}", existingLastDirtyTimestamp, registrationLastDirtyTimestamp);
 
                 // this is a > instead of a >= because if the timestamps are equal, we still take the remote transmitted
                 // InstanceInfo instead of the server local copy.
+                // 代表该注册时延时的 应该是之前就发起请求了
                 if (existingLastDirtyTimestamp > registrationLastDirtyTimestamp) {
                     logger.warn("There is an existing lease and the existing lease's dirty timestamp {} is greater" +
                             " than the one that is being registered {}", existingLastDirtyTimestamp, registrationLastDirtyTimestamp);
                     logger.warn("Using the existing instanceInfo instead of the new instanceInfo as the registrant");
+                    //将 本次注册信息 更换成 当前注册中心缓存的 服务实例  如何保证数据的版本 这里通过时间戳来实现
                     registrant = existingLease.getHolder();
                 }
             } else {
+                // 代表添加一个新的 服务信息
                 // The lease does not exist and hence it is a new registration
                 synchronized (lock) {
+                    //当想要注册新的 client 时 增加 renew 计数 现在还不知道是为什么
                     if (this.expectedNumberOfClientsSendingRenews > 0) {
                         // Since the client wants to register it, increase the number of clients sending renews
                         this.expectedNumberOfClientsSendingRenews = this.expectedNumberOfClientsSendingRenews + 1;

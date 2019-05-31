@@ -86,7 +86,7 @@ import javax.inject.Singleton;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim
- *
+ *      这个类 就是 eurekaServer 的本体 在这里每个 eurekaClient 都被看做是一个节点
  */
 @Singleton
 public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
@@ -398,13 +398,17 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      * @param isReplication
      *            true if this is a replication event from other replica nodes,
      *            false otherwise.
+     *            这里将 注册的 eurekaClient 信息注册到多个实例 现在还不清楚是 多个注册中心 还是包含 eurekaClient 的实例
      */
     @Override
     public void register(final InstanceInfo info, final boolean isReplication) {
+        //获取间隔时间 默认是90s
         int leaseDuration = Lease.DEFAULT_DURATION_IN_SECS;
+        //这里使用 info 携带的 信息
         if (info.getLeaseInfo() != null && info.getLeaseInfo().getDurationInSecs() > 0) {
             leaseDuration = info.getLeaseInfo().getDurationInSecs();
         }
+        //进行真正的注册
         super.register(info, leaseDuration, isReplication);
         replicateToPeers(Action.Register, info.getAppName(), info.getId(), info, null, isReplication);
     }

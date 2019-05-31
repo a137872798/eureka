@@ -25,6 +25,7 @@ import com.netflix.discovery.shared.LookupService;
  *  - provide the ability to register and access the healthcheck handler for the client
  *
  * @author David Liu
+ *      eurekaClient  接口实现了 LookService 因为每个 Client 既可以是服务提供者 也可以是服务消费者 这里应该是作为消费者的职能
  */
 @ImplementedBy(DiscoveryClient.class)
 public interface EurekaClient extends LookupService {
@@ -37,6 +38,7 @@ public interface EurekaClient extends LookupService {
      * @param region the region that the Applications reside in
      * @return an {@link com.netflix.discovery.shared.Applications} for the matching region. a Null value
      *         is treated as the local region.
+     *         获取某个指定的region 下的所有应用实例  每个服务实例在注册的时候会划分到一个region 上 这样在获取服务实例的时候会优先从最近的 region 获取
      */
     public Applications getApplicationsForARegion(@Nullable String region);
 
@@ -45,6 +47,8 @@ public interface EurekaClient extends LookupService {
      *
      * @param serviceUrl The string representation of the service url.
      * @return The registry information containing all applications.
+     *
+     *          通过服务路径来获取对应实例
      */
     public Applications getApplications(String serviceUrl);
 
@@ -54,6 +58,7 @@ public interface EurekaClient extends LookupService {
      * @param vipAddress The VIP address to match the instances for.
      * @param secure true if it is a secure vip address, false otherwise
      * @return - The list of {@link InstanceInfo} objects matching the criteria
+     *      使用vip 地址获取对应的服务实例
      */
     public List<InstanceInfo> getInstancesByVipAddress(String vipAddress, boolean secure);
 
@@ -66,6 +71,7 @@ public interface EurekaClient extends LookupService {
      *               assumed.
      *
      * @return - The list of {@link InstanceInfo} objects matching the criteria, empty list if not instances found.
+     *      通过vip 地址 和 region 定位服务实例
      */
     public List<InstanceInfo> getInstancesByVipAddress(String vipAddress, boolean secure, @Nullable String region);
 
@@ -78,6 +84,7 @@ public interface EurekaClient extends LookupService {
      * @param appName The applicationName to match the instances for.
      * @param secure true if it is a secure vip address, false otherwise.
      * @return - The list of {@link InstanceInfo} objects matching the criteria.
+     *      指定应用名 和vip 地址
      */
     public List<InstanceInfo> getInstancesByVipAddressAndAppName(String vipAddress, String appName, boolean secure);
 
@@ -87,11 +94,15 @@ public interface EurekaClient extends LookupService {
 
     /**
      * @return in String form all regions (local + remote) that can be accessed by this client
+     *      获取当前所有 region
      */
     public Set<String> getAllKnownRegions();
 
     /**
      * @return the current self instance status as seen on the Eureka server.
+     *
+     *      可以获取当前client 在server 上的状态 应该是判断 当前client 是否处于正常状态
+     *      对应status 为 UP DOWN STARTING OUT_OF_SERVICE UNKNOW   OUT_OF_SERVICE  应该是指主动下线
      */
     public InstanceInfo.InstanceStatus getInstanceRemoteStatus();
 
@@ -160,6 +171,7 @@ public interface EurekaClient extends LookupService {
      * by {@link EurekaClientConfig#getInstanceInfoReplicationIntervalSeconds()}.
      *
      * @param healthCheckHandler app specific healthcheck handler.
+     *                           注册指定的心跳处理器  暂时不确定是做什么的
      */
     public void registerHealthCheck(HealthCheckHandler healthCheckHandler);
 
@@ -174,6 +186,7 @@ public interface EurekaClient extends LookupService {
      * and must therefore return as quickly as possible without blocking.
      * 
      * @param eventListener
+     *      为eurekaClient 注册事件监听器
      */
     public void registerEventListener(EurekaEventListener eventListener);
     
@@ -183,11 +196,14 @@ public interface EurekaClient extends LookupService {
      * 
      * @param eventListener
      * @return True if removed otherwise false if the listener was never registered.
+     *
+     *      注销事件监听器
      */
     public boolean unregisterEventListener(EurekaEventListener eventListener);
     
     /**
      * @return the current registered healthcheck handler
+     *      获取当前注册的心跳检测处理器 看来一个client 只能绑定一个 心跳检测处理器
      */
     public HealthCheckHandler getHealthCheckHandler();
 
@@ -197,16 +213,19 @@ public interface EurekaClient extends LookupService {
 
     /**
      * Shuts down Eureka Client. Also sends a deregistration request to the eureka server.
+     * 终止当前client  同时会发送下线信息给 eurekaServer
      */
     public void shutdown();
     
     /**
      * @return the configuration of this eureka client
+     *      获取eurekaClient 的配置信息
      */
     public EurekaClientConfig getEurekaClientConfig();
     
     /**
      * @return the application info manager of this eureka client
+     *      获取应用管理器
      */
     public ApplicationInfoManager getApplicationInfoManager();
 }

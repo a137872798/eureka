@@ -21,10 +21,14 @@ import org.slf4j.LoggerFactory;
  * Wrapped subtasks must be thread safe.
  *
  * @author David Qiang Liu
+ *      拓展jdk 原生的定时器
  */
 public class TimedSupervisorTask extends TimerTask {
     private static final Logger logger = LoggerFactory.getLogger(TimedSupervisorTask.class);
 
+    /**
+     * Counter 接口 只有2个方法 一个是increment()  一个是 increment(num) 代表修改计数值
+     */
     private final Counter successCounter;
     private final Counter timeoutCounter;
     private final Counter rejectedCounter;

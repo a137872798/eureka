@@ -40,7 +40,10 @@ import org.slf4j.LoggerFactory;
  * A <em>jersey</em> resource that handles requests for replication purposes.
  *
  * @author Karthik Ranganathan
- *
+ * @Path 对应到 @ReqeustMapping
+ * @GET @POST @DELETE  对应 各种请求动作
+ * @Produces 标注返回的MIME 媒体类型
+ * @PathParam @QueryParam 这些 都对应到 spring-mvc 中各个从请求路径 or 请求头解析参数的方法
  */
 @Path("/{version}/peerreplication")
 @Produces({"application/xml", "application/json"})

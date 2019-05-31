@@ -49,7 +49,7 @@ import com.netflix.discovery.shared.transport.EurekaTransportConfig;
  * </p>
  *
  * @author Karthik Ranganathan
- *
+ *      eurekaClient 的配置对象
  */
 @ImplementedBy(DefaultEurekaClientConfig.class)
 public interface EurekaClientConfig {
@@ -59,20 +59,22 @@ public interface EurekaClientConfig {
      * the eureka server.
      *
      * @return the fetch interval in seconds.
+     *      获取拉取注册中心 当前服务 并生成缓存的 时间间隔
      */
     int getRegistryFetchIntervalSeconds();
 
     /**
      * Indicates how often(in seconds) to replicate instance changes to be
      * replicated to the eureka server.
-     *
      * @return the instance replication interval in seconds.
+     *      复制实例更改的频率
      */
     int getInstanceInfoReplicationIntervalSeconds();
 
     /**
      * Indicates how long initially (in seconds) to replicate instance info
      * to the eureka server
+     *      每初始化一个服务时 需要多久才会被检测到
      */
     int getInitialInstanceInfoReplicationIntervalSeconds();
 
@@ -417,6 +419,7 @@ public interface EurekaClientConfig {
      *
      * @return the list of eureka server service urls for eureka clients to talk
      *         to.
+     *         根据 Zone 信息 获取该 地区下所有的 注册中心
      */
     List<String> getEurekaServerServiceUrls(String myZone);
 

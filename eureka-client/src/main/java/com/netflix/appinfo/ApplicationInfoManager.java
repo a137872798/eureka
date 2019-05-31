@@ -196,11 +196,14 @@ public class ApplicationInfoManager {
      * server on next heartbeat.
      *
      * see {@link InstanceInfo#getHostName()} for explanation on why the hostname is used as the default address
+     *      更新当前主机信息
      */
     public void refreshDataCenterInfoIfRequired() {
+        //获取 主机信息  这个值是设置进去的 难道会在哪里做改动吗 应该是对用户开放了一个入口去修改hostname 然后这里会检测到之后就触发心跳将最新信息注册到eruekaServer 上
         String existingAddress = instanceInfo.getHostName();
 
         String existingSpotInstanceAction = null;
+        //有关 amazon 的先不管
         if (instanceInfo.getDataCenterInfo() instanceof AmazonInfo) {
             existingSpotInstanceAction = ((AmazonInfo) instanceInfo.getDataCenterInfo()).get(AmazonInfo.MetaDataKey.spotInstanceAction);
         }
@@ -208,6 +211,7 @@ public class ApplicationInfoManager {
         String newAddress;
         if (config instanceof RefreshableInstanceConfig) {
             // Refresh data center info, and return up to date address
+            // 获取最新的 地址
             newAddress = ((RefreshableInstanceConfig) config).resolveDefaultAddress(true);
         } else {
             newAddress = config.getHostName(true);
@@ -245,19 +249,27 @@ public class ApplicationInfoManager {
         instanceInfo.setIsDirty();
     }
 
+    /**
+     * 更新租约信息
+     */
     public void refreshLeaseInfoIfRequired() {
+        //获取租约的信息
         LeaseInfo leaseInfo = instanceInfo.getLeaseInfo();
         if (leaseInfo == null) {
             return;
         }
+        //获取 租约的超时时间 以及新的 间隔时间
         int currentLeaseDuration = config.getLeaseExpirationDurationInSeconds();
         int currentLeaseRenewal = config.getLeaseRenewalIntervalInSeconds();
+        //一旦有关 租约的配置信息发生了变化 就生成一个新的 LeaseInfo  那么 热部署就是这么实现的 定期会去读取自身的配置信息 一旦发现修改就同步到 订阅自己的各个注册中心上
+        //而 配置信息 又是由配置中心统一管理
         if (leaseInfo.getDurationInSecs() != currentLeaseDuration || leaseInfo.getRenewalIntervalInSecs() != currentLeaseRenewal) {
             LeaseInfo newLeaseInfo = LeaseInfo.Builder.newBuilder()
                     .setRenewalIntervalInSecs(currentLeaseRenewal)
                     .setDurationInSecs(currentLeaseDuration)
                     .build();
             instanceInfo.setLeaseInfo(newLeaseInfo);
+            //设置成dirty 可能是 立即触发心跳之类的
             instanceInfo.setIsDirty();
         }
     }

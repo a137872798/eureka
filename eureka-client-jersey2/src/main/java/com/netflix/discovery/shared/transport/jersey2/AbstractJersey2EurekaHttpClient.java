@@ -49,6 +49,7 @@ import static com.netflix.discovery.shared.transport.EurekaHttpResponse.anEureka
 
 /**
  * @author Tomasz Bak
+ *      基于 jersey 进行通信  该框架是一个 restFul 框架
  */
 public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClient {
 
@@ -67,6 +68,7 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         String localUserName = null;
         String localPassword = null;
         try {
+            //将 String 转换成URL
             URI serviceURI = new URI(serviceUrl);
             if (serviceURI.getUserInfo() != null) {
                 String[] credentials = serviceURI.getUserInfo().split(":");
@@ -77,6 +79,7 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
             }
         } catch (URISyntaxException ignore) {
         }
+        //如果存在用户名密码 就设置
         this.userName = localUserName;
         this.password = localPassword;
     }

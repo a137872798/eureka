@@ -46,7 +46,7 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim
- *
+ *      这里好像使用了一个固定的数据中心  先不管
  */
 @JsonDeserialize(using = StringInterningAmazonInfoBuilder.class)
 public class AmazonInfo implements DataCenterInfo, UniqueIdentifier {

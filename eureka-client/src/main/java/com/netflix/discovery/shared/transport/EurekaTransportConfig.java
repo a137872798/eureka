@@ -4,11 +4,13 @@ package com.netflix.discovery.shared.transport;
  * Config class that governs configurations relevant to the transport layer
  *
  * @author David Liu
+ *      针对  传输层的配置信息
  */
 public interface EurekaTransportConfig {
 
     /**
      * @return the reconnect inverval to use for sessioned clients
+     * 获取重连时间
      */
     int getSessionedClientReconnectIntervalSeconds();
 

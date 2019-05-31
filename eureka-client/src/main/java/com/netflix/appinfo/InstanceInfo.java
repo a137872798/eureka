@@ -1213,9 +1213,12 @@ public class InstanceInfo {
      * @return the lastDirtyTimestamp if is dirty, null otherwise.
      */
     public synchronized Long isDirtyWithTime() {
+        //volatile 修饰 保证能及时读取到 最新状态
         if (isInstanceInfoDirty) {
+            //返回上次 修改成"脏"的时间戳
             return lastDirtyTimestamp;
         } else {
+            //如果当前不是脏状态就 返回null 代表不用更新
             return null;
         }
     }
@@ -1240,6 +1243,8 @@ public class InstanceInfo {
     /**
      * Sets the dirty flag so that the instance information can be carried to
      * the discovery server on the next heartbeat.
+     *      将本实例信息修改成"脏" 之后 会根据该状态 发送心跳吗??? 在eurekaClient 实例化的时候 会将信息发送到注册中心并 该自身信息修改为 dirty
+     *      大概就是心跳的时候才是真正把自身信息同步到注册中心的  那么不设置为dirty 就不进行心跳了吗 eukekaServer 如何检测服务是否下线
      */
     public synchronized void setIsDirty() {
         isInstanceInfoDirty = true;
@@ -1264,6 +1269,8 @@ public class InstanceInfo {
      * @param unsetDirtyTimestamp the expected lastDirtyTimestamp to unset.
      */
     public synchronized void unsetIsDirty(long unsetDirtyTimestamp) {
+        //如果最后一次 dirty 时间小于传入时间 代表lastDirtyTimestamp 已经失效 那么就需要修改 isDirty 为false
+        //这里涉及到2个操作  compare and set 所以 不能单纯依靠原子Boolean 来实现 所以使用了 内置锁
         if (lastDirtyTimestamp <= unsetDirtyTimestamp) {
             isInstanceInfoDirty = false;
         } else {

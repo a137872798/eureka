@@ -59,6 +59,7 @@ import com.thoughtworks.xstream.annotations.XStreamImplicit;
  *
  * @author Karthik Ranganathan
  *
+ *      Application 的 集合
  */
 @Serializer("com.netflix.discovery.converters.EntityBodyConverter")
 @XStreamAlias("applications")
@@ -103,11 +104,14 @@ public class Applications {
     public Applications(@JsonProperty("appsHashCode") String appsHashCode,
             @JsonProperty("versionDelta") Long versionDelta,
             @JsonProperty("application") List<Application> registeredApplications) {
+        //这里为什么要使用并发队列来维护 当前能获取的所有应用  应该是有多个时机 会修改 该列表 该队列是通过 自旋+CAS 也就是乐观锁 实现 添加元素的  适合于
+        //竞争不激烈 并且 对可见性要求 高的场景 读写数组 允许读取到过期数据那么 如果某一时刻 读取到 过期数据 且进行缓存 那么在下次更新缓存列表前 都会访问该失效服务 所以
+        //不能使用基于 读写数组的 实现
         this.applications = new ConcurrentLinkedQueue<Application>();
+        this.appsHashCode = appsHashCode;
         this.appNameApplicationMap = new ConcurrentHashMap<String, Application>();
         this.virtualHostNameAppMap = new ConcurrentHashMap<String, VipIndexSupport>();
         this.secureVirtualHostNameAppMap = new ConcurrentHashMap<String, VipIndexSupport>();
-        this.appsHashCode = appsHashCode;
         this.versionDelta = versionDelta;
 
         for (Application app : registeredApplications) {

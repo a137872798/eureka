@@ -228,25 +228,38 @@ public class EndpointUtils {
      * @param instanceZone The zone in which the client resides
      * @param preferSameZone true if we have to prefer the same zone as the client, false otherwise
      * @return an (ordered) map of zone -> list of urls mappings, with the preferred zone first in iteration order
+     *      获取到 所有可以进行注册的 eurekaServce 的
      */
     public static Map<String, List<String>> getServiceUrlsMapFromConfig(EurekaClientConfig clientConfig, String instanceZone, boolean preferSameZone) {
+        //这里使用了 linkedHashMap 是有什么原因吗??  注意 这里传入了 Config 对象 整合 spring cloud 时 应该是解析yml 文件生成的
         Map<String, List<String>> orderedUrls = new LinkedHashMap<>();
+        //从配置文件中首先获取region 信息  一般情况下是 不设置的 也就是default
         String region = getRegion(clientConfig);
+        //查询 该 region下所有可用的 zone
         String[] availZones = clientConfig.getAvailabilityZones(clientConfig.getRegion());
+        //如果没有找到可用的 zone 信息 使用一个default 的 zone  这里其实应该是异常情况了 因为一般定义在 defaultZone 的是注册中心的url 生成的 zone[]
+        //就会维护了一组url 信息
         if (availZones == null || availZones.length == 0) {
             availZones = new String[1];
             availZones[0] = DEFAULT_ZONE;
         }
         logger.debug("The availability zone for the given region {} are {}", region, availZones);
+        //获取 zone 的 下标
         int myZoneOffset = getZoneOffset(instanceZone, preferSameZone, availZones);
 
+        //获取到 合适的 zone
         String zone = availZones[myZoneOffset];
+        //找到 该 zone 的 全部 注册中心(eurekaServer)
         List<String> serviceUrls = clientConfig.getEurekaServerServiceUrls(zone);
         if (serviceUrls != null) {
+            //按照顺序 加入到 链表结构中
             orderedUrls.put(zone, serviceUrls);
         }
+        //如果 元素 与下标刚好对应 那么 本次偏移量就是0  否则偏移量加1  前半句可能是一个简化的条件 就是针对 数组长度为1 的
+        //可以理解为大部分情况 都会加入所有zone的 注册中心url
         int currentOffset = myZoneOffset == (availZones.length - 1) ? 0 : (myZoneOffset + 1);
         while (currentOffset != myZoneOffset) {
+            //如果下标 不对应 那么 会将 每个zone 中 注册中心url 全部加入
             zone = availZones[currentOffset];
             serviceUrls = clientConfig.getEurekaServerServiceUrls(zone);
             if (serviceUrls != null) {
@@ -352,6 +365,7 @@ public class EndpointUtils {
      * Get the region that this particular instance is in.
      *
      * @return - The region in which the particular instance belongs to.
+     * 从 config 中 剥离 region 属性
      */
     public static String getRegion(EurekaClientConfig clientConfig) {
         String region = clientConfig.getRegion();
@@ -369,9 +383,15 @@ public class EndpointUtils {
 
     /**
      * Gets the zone to pick up for this instance.
+     * 通过指定算法 挑选合适的 注册中心(eurekaServer)实例对象
+     *
+     * @param myZone 应该是 该eurekaClient 所在的 zone 吧  如果注册zho-ngxin
+     * @param preferSameZone 是否倾向于使用同一zone
+     * @param availZones 所有可用的zone
      */
     private static int getZoneOffset(String myZone, boolean preferSameZone, String[] availZones) {
         for (int i = 0; i < availZones.length; i++) {
+            //很简洁的写法需要全部满足 时 会返回 myZone 的下标否则就是返回0
             if (myZone != null && (availZones[i].equalsIgnoreCase(myZone.trim()) == preferSameZone)) {
                 return i;
             }

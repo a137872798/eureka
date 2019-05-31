@@ -26,11 +26,24 @@ import java.util.Map;
 
 /**
  * @author Tomasz Bak
+ *      eurekaServer 封装的 请求响应体
  */
 public class EurekaHttpResponse<T> {
+    /**
+     * 访问结果状态码
+     */
     private final int statusCode;
+    /**
+     * 响应实体
+     */
     private final T entity;
+    /**
+     * 对应的请求头信息
+     */
     private final Map<String, String> headers;
+    /**
+     * 对端的 url
+     */
     private final URI location;
 
     protected EurekaHttpResponse(int statusCode, T entity) {

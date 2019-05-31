@@ -108,6 +108,7 @@ import com.netflix.servo.monitor.Stopwatch;
  * @author Karthik Ranganathan, Greg Kim
  * @author Spencer Gibb
  *
+ *  实现了 EurekaClient 代表该对象能够 自主的从 eurekaServer 上发现服务  也能够向 eurekaServer 注册服务信息 以及自动续约
  */
 @Singleton
 public class DiscoveryClient implements EurekaClient {
@@ -147,6 +148,9 @@ public class DiscoveryClient implements EurekaClient {
     private final Provider<HealthCheckHandler> healthCheckHandlerProvider;
     private final Provider<HealthCheckCallback> healthCheckCallbackProvider;
     private final PreRegistrationHandler preRegistrationHandler;
+    /**
+     * 本地服务应用缓存
+     */
     private final AtomicReference<Applications> localRegionApps = new AtomicReference<Applications>();
     private final Lock fetchRegistryUpdateLock = new ReentrantLock();
     // monotonically increasing generation counter to ensure stale threads do not reset registry to an older version
@@ -184,10 +188,16 @@ public class DiscoveryClient implements EurekaClient {
 
     private final long initTimestampMs;
 
+    /**
+     * eureka 传输层对象 进行http 交互 都委托给该对象
+     */
     private static final class EurekaTransport {
         private ClosableResolver bootstrapResolver;
         private TransportClientFactory transportClientFactory;
 
+        /**
+         * 用来进行 注册的 client 对象
+         */
         private EurekaHttpClient registrationClient;
         private EurekaHttpClientFactory registrationClientFactory;
 
@@ -821,11 +831,13 @@ public class DiscoveryClient implements EurekaClient {
 
     /**
      * Register with the eureka service by making the appropriate REST call.
+     * 通过 restFul 风格访问 将自身信息注册到 eurekaServer 上
      */
     boolean register() throws Throwable {
         logger.info(PREFIX + "{}: registering service...", appPathIdentifier);
         EurekaHttpResponse<Void> httpResponse;
         try {
+            //为什么要 分出不同的 client 呢 应该是每个client 内部维护了自己的线程池 又或者单纯为了 解耦
             httpResponse = eurekaTransport.registrationClient.register(instanceInfo);
         } catch (Exception e) {
             logger.warn(PREFIX + "{} - registration failed {}", appPathIdentifier, e.getMessage(), e);
@@ -834,27 +846,37 @@ public class DiscoveryClient implements EurekaClient {
         if (logger.isInfoEnabled()) {
             logger.info(PREFIX + "{} - registration status: {}", appPathIdentifier, httpResponse.getStatusCode());
         }
+        //根据 code 码 判断请求是否成功  必须是204 才成功  204 代表只成功的状态并且 数据体为空
         return httpResponse.getStatusCode() == Status.NO_CONTENT.getStatusCode();
     }
 
     /**
      * Renew with the eureka service by making the appropriate REST call
+     * 通过 rest 请求 进行续约
      */
     boolean renew() {
         EurekaHttpResponse<InstanceInfo> httpResponse;
         try {
+            //与进行注册的 client 是同一个 发送心跳包 这里还是传入了 instanceInfo
             httpResponse = eurekaTransport.registrationClient.sendHeartBeat(instanceInfo.getAppName(), instanceInfo.getId(), instanceInfo, null);
             logger.debug(PREFIX + "{} - Heartbeat status: {}", appPathIdentifier, httpResponse.getStatusCode());
+            //如果响应结果为404 如果首次 注册时候的情况 好像就会通过续约来发现 之前失败了 这里有进行了新的注册
             if (httpResponse.getStatusCode() == Status.NOT_FOUND.getStatusCode()) {
+                //应该是代表 除第一次注册之外的注册次数 这些计数 应该会通过某个 endpoint 暴露出来
                 REREGISTER_COUNTER.increment();
                 logger.info(PREFIX + "{} - Re-registering apps/{}", appPathIdentifier, instanceInfo.getAppName());
+                //更新 脏时间
                 long timestamp = instanceInfo.setIsDirtyWithTime();
+                //这里需要获取 注册是否成功的结果
                 boolean success = register();
                 if (success) {
+                    //成功的话取消 dirty 状态 如果失败 不做处理 因为设置成了 dirty状态 之后会在后台线程重新注册
                     instanceInfo.unsetIsDirty(timestamp);
                 }
+                //如果 注册还是失败 就认为本次续约失败
                 return success;
             }
+            //根据 返回码是否为200 确定本次续约是否完成
             return httpResponse.getStatusCode() == Status.OK.getStatusCode();
         } catch (Throwable e) {
             logger.error(PREFIX + "{} - was unable to send heartbeat!", appPathIdentifier, e);
@@ -939,15 +961,19 @@ public class DiscoveryClient implements EurekaClient {
      * @param forceFullRegistryFetch Forces a full registry fetch.
      *
      * @return true if the registry was fetched
+     *      从注册中心拉取最新的 服务列表 并缓存到本地
      */
     private boolean fetchRegistry(boolean forceFullRegistryFetch) {
+        //停表 该对象应该是用来计时的 start 方法就是 设置了开始时间以及启动标识
         Stopwatch tracer = FETCH_REGISTRY_TIMER.start();
 
         try {
             // If the delta is disabled or if it is the first time, get all
             // applications
+            // 获取当前所有应用
             Applications applications = getApplications();
 
+            //todo
             if (clientConfig.shouldDisableDelta()
                     || (!Strings.isNullOrEmpty(clientConfig.getRegistryRefreshSingleVipAddress()))
                     || forceFullRegistryFetch
@@ -1245,12 +1271,17 @@ public class DiscoveryClient implements EurekaClient {
 
     /**
      * Initializes all scheduled tasks.
+     * 开始执行全部的定时任务
      */
     private void initScheduledTasks() {
+        //config 是否设置了从注册中心拉取信息
         if (clientConfig.shouldFetchRegistry()) {
             // registry cache refresh timer
+            // 从注册中心更新本地服务缓存列表的 时间间隔
             int registryFetchIntervalSeconds = clientConfig.getRegistryFetchIntervalSeconds();
+            // 最大超时时间
             int expBackOffBound = clientConfig.getCacheRefreshExecutorExponentialBackOffBound();
+            //执行定时任务
             scheduler.schedule(
                     new TimedSupervisorTask(
                             "cacheRefresh",
@@ -1264,13 +1295,21 @@ public class DiscoveryClient implements EurekaClient {
                     registryFetchIntervalSeconds, TimeUnit.SECONDS);
         }
 
+        //是否需要将本服务(eurekaClient) 注册到注册中心(eurekaServer)  这里是续约的相关内容 也就是心跳相关的
+        //下面还有个 用于将自身信息注册到 eurekaServer 的 那个会定期检查自身信息是否发生变化 并重新注册到 注册中心 不同与续约的概念 续约应该是不需要消息内容的 只需要
+        //一个续约的标识就可以
+        //这里将 续约 和 注册放到了一起 因为只有 允许注册的情况下 才有 续约的概念
         if (clientConfig.shouldRegisterWithEureka()) {
+            //获取 刷新租约的 时间间隔 该间隔应该就是定时期限
             int renewalIntervalInSecs = instanceInfo.getLeaseInfo().getRenewalIntervalInSecs();
+            //获取 最大的超时重连时间
             int expBackOffBound = clientConfig.getHeartbeatExecutorExponentialBackOffBound();
             logger.info("Starting heartbeat executor: " + "renew interval is: {}", renewalIntervalInSecs);
 
             // Heartbeat timer
+            // 开启心跳定时器的任务
             scheduler.schedule(
+                    //创建定时任务对象 该对象 增加了 Runnable 接口
                     new TimedSupervisorTask(
                             "heartbeat",
                             scheduler,
@@ -1278,11 +1317,14 @@ public class DiscoveryClient implements EurekaClient {
                             renewalIntervalInSecs,
                             TimeUnit.SECONDS,
                             expBackOffBound,
+                            //该对象对应一个心跳任务
                             new HeartbeatThread()
                     ),
+                    //该定时器不会直接启动 而是在一定时间间隔后
                     renewalIntervalInSecs, TimeUnit.SECONDS);
 
             // InstanceInfo replicator
+            // 该对象就是具备将自身 按一定时间间隔 更新到注册中心的实例对象
             instanceInfoReplicator = new InstanceInfoReplicator(
                     this,
                     instanceInfo,
@@ -1312,6 +1354,7 @@ public class DiscoveryClient implements EurekaClient {
                 applicationInfoManager.registerStatusChangeListener(statusChangeListener);
             }
 
+            //启动 定时任务将自身信息同步到注册中心
             instanceInfoReplicator.start(clientConfig.getInitialInstanceInfoReplicationIntervalSeconds());
         } else {
             logger.info("Not registering with Eureka server per configuration");
@@ -1378,9 +1421,12 @@ public class DiscoveryClient implements EurekaClient {
     /**
      * Refresh the current local instanceInfo. Note that after a valid refresh where changes are observed, the
      * isDirty flag on the instanceInfo is set to true
+     * 刷新本地实例 如果发现有效的改变 就要设置 isDirty 为true
      */
     void refreshInstanceInfo() {
+        //重新获取主机名 判断是否发生修改如果有的话 就需要在下次心跳 中同步到 注册中心 这里会被动刷新应用实例信息
         applicationInfoManager.refreshDataCenterInfoIfRequired();
+        //更新租约信息 就是读取 有关心跳的配置 比如多久触发一次心跳 最大多少时间没有发出心跳认为是断租
         applicationInfoManager.refreshLeaseInfoIfRequired();
 
         InstanceStatus status;
@@ -1398,11 +1444,15 @@ public class DiscoveryClient implements EurekaClient {
 
     /**
      * The heartbeat task that renews the lease in the given intervals.
+     * 进行续约的 任务对象
      */
     private class HeartbeatThread implements Runnable {
 
+        @Override
         public void run() {
+            //如果续约成功就更新 最后次心跳的时间
             if (renew()) {
+                //该变量也是 volatile 修饰的
                 lastSuccessfulHeartbeatTimestamp = System.currentTimeMillis();
             }
         }
@@ -1418,6 +1468,10 @@ public class DiscoveryClient implements EurekaClient {
         return instanceInfo;
     }
 
+    /**
+     * 获取心跳检测 处理对象 该对象是可以通过setXX 设置进来的
+     * @return
+     */
     @Override
     public HealthCheckHandler getHealthCheckHandler() {
         HealthCheckHandler healthCheckHandler = this.healthCheckHandlerRef.get();
@@ -1439,45 +1493,62 @@ public class DiscoveryClient implements EurekaClient {
 
     /**
      * The task that fetches the registry information at specified intervals.
-     *
+     * 用于更新本地服务缓存列表的 定时任务
      */
     class CacheRefreshThread implements Runnable {
+        @Override
         public void run() {
             refreshRegistry();
         }
     }
 
+    /**
+     * 从注册中心 拉取服务到本地 并生成缓存
+     */
     @VisibleForTesting
     void refreshRegistry() {
         try {
+            //判断是否有指定的 region 如果有的话 应该会从对应的 region 上获取注册中心列表
             boolean isFetchingRemoteRegionRegistries = isFetchingRemoteRegionRegistries();
 
             boolean remoteRegionsModified = false;
             // This makes sure that a dynamic change to remote regions to fetch is honored.
+            // 获取最新的 注册中心 region 信息 因为配置是可以动态改动的  一般情况下 fetchRemoteRegionsRegistry 属性为空 所以可以忽略
             String latestRemoteRegions = clientConfig.fetchRegistryForRemoteRegions();
+            // 存在 限定注册中心 region 的情况
             if (null != latestRemoteRegions) {
+                //获取 region 信息
                 String currentRemoteRegions = remoteRegionsToFetch.get();
+                //如果配置中 获取的 和 原子引用维护的不一样
                 if (!latestRemoteRegions.equals(currentRemoteRegions)) {
                     // Both remoteRegionsToFetch and AzToRegionMapper.regionsToFetch need to be in sync
+                    // 锁定映射对象
                     synchronized (instanceRegionChecker.getAzToRegionMapper()) {
+                        //将 原子引用更新成最新的配置
                         if (remoteRegionsToFetch.compareAndSet(currentRemoteRegions, latestRemoteRegions)) {
                             String[] remoteRegions = latestRemoteRegions.split(",");
+                            //更新 region 数组
                             remoteRegionsRef.set(remoteRegions);
+                            //更新
                             instanceRegionChecker.getAzToRegionMapper().setRegionsToFetch(remoteRegions);
                             remoteRegionsModified = true;
                         } else {
+                            //CAS 失败 代表有别的正在更新 就忽略
                             logger.info("Remote regions to fetch modified concurrently," +
                                     " ignoring change from {} to {}", currentRemoteRegions, latestRemoteRegions);
                         }
                     }
+                    //如果 配置信息一致就不需要更新了
                 } else {
                     // Just refresh mapping to reflect any DNS/Property change
                     instanceRegionChecker.getAzToRegionMapper().refreshMapping();
                 }
             }
 
+            //开始拉取 注册中心 服务列表
             boolean success = fetchRegistry(remoteRegionsModified);
             if (success) {
+                //更新成功的情况下 获取 最新的 缓存服务尺寸
                 registrySize = localRegionApps.get().size();
                 lastSuccessfulRegistryFetchTimestamp = System.currentTimeMillis();
             }
