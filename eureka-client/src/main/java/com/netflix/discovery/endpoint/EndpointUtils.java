@@ -326,13 +326,16 @@ public class EndpointUtils {
      *            - The region for which the zone names need to be retrieved
      * @return - The list of CNAMES from which the zone-related information can
      *         be retrieved
+     *         通过 region 获取 zone 信息
      */
     public static Map<String, List<String>> getZoneBasedDiscoveryUrlsFromRegion(EurekaClientConfig clientConfig, String region) {
         String discoveryDnsName = null;
         try {
+            // 生成DNS name
             discoveryDnsName = "txt." + region + "." + clientConfig.getEurekaServerDNSName();
 
             logger.debug("The region url to be looked up is {} :", discoveryDnsName);
+            // 从文件中找到映射关系 并排序 (利用TreeSet)
             Set<String> zoneCnamesForRegion = new TreeSet<String>(DnsResolver.getCNamesFromTxtRecord(discoveryDnsName));
             Map<String, List<String>> zoneCnameMapForRegion = new TreeMap<String, List<String>>();
             for (String zoneCname : zoneCnamesForRegion) {

@@ -140,6 +140,12 @@ public class ResponseCacheImpl implements ResponseCache {
      */
     private final ServerCodecs serverCodecs;
 
+    /**
+     * 通过 服务器配置 服务器编解码器 和 注册 中心来初始化
+     * @param serverConfig
+     * @param serverCodecs
+     * @param registry
+     */
     ResponseCacheImpl(EurekaServerConfig serverConfig, ServerCodecs serverCodecs, AbstractInstanceRegistry registry) {
         this.serverConfig = serverConfig;
         this.serverCodecs = serverCodecs;
@@ -147,6 +153,7 @@ public class ResponseCacheImpl implements ResponseCache {
         this.shouldUseReadOnlyResponseCache = serverConfig.shouldUseReadOnlyResponseCache();
         this.registry = registry;
 
+        // 获取更新缓存的时间间隔
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
         // 构建缓存容器
         this.readWriteCacheMap =
@@ -165,6 +172,7 @@ public class ResponseCacheImpl implements ResponseCache {
                                     // copy 一个不携带 region 的 缓存键
                                     Key cloneWithNoRegions = removedKey.cloneWithoutRegions();
                                     // 因为 该map 对象是 Multimap 代表 一个key 会同时维护多个 value 这里必须同时指定键值对 才能正确删除
+                                    // 这里设置回调对象 也就是在 readWriteCacheMap 移除过期数据时  清除 Multimap中的关联数据
                                     regionSpecificKeys.remove(cloneWithNoRegions, removedKey);
                                 }
                             }
@@ -173,15 +181,19 @@ public class ResponseCacheImpl implements ResponseCache {
                             @Override
                             public Value load(Key key) throws Exception {
                                 if (key.hasRegions()) {
+                                    // 如果有区域信息 就保存到 regionSpecificKeys 中
                                     Key cloneWithNoRegions = key.cloneWithoutRegions();
                                     regionSpecificKeys.put(cloneWithNoRegions, key);
                                 }
+                                // 通过 key 获取value
                                 Value value = generatePayload(key);
                                 return value;
                             }
                         });
 
+        // 如果允许使用 readOnlyResponseCache
         if (shouldUseReadOnlyResponseCache) {
+            // getCacheUpdateTask() 方法会返回一个 具备同步 readOnly 中数据 与 readWrite 数据的任务
             timer.schedule(getCacheUpdateTask(),
                     new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
                             + responseCacheUpdateIntervalMs),
@@ -189,24 +201,32 @@ public class ResponseCacheImpl implements ResponseCache {
         }
 
         try {
+            // 监控该对象的信息
             Monitors.registerObject(this);
         } catch (Throwable e) {
             logger.warn("Cannot register the JMX monitor for the InstanceRegistry", e);
         }
     }
 
+    /**
+     * 获取更新缓存的任务对象
+     * @return
+     */
     private TimerTask getCacheUpdateTask() {
         return new TimerTask() {
             @Override
             public void run() {
                 logger.debug("Updating the client cache from response cache");
+                // 获取 只读缓存中所有数据
                 for (Key key : readOnlyCacheMap.keySet()) {
                     if (logger.isDebugEnabled()) {
                         logger.debug("Updating the client cache from response cache for key : {} {} {} {}",
                                 key.getEntityType(), key.getName(), key.getVersion(), key.getType());
                     }
                     try {
+                        // 将版本设置到 当前线程中 与线程绑定
                         CurrentRequestVersion.set(key.getVersion());
+                        // 使用 readWrite中的数据 去 同步readOnly中的数据
                         Value cacheValue = readWriteCacheMap.get(key);
                         Value currentCacheValue = readOnlyCacheMap.get(key);
                         if (cacheValue != currentCacheValue) {
@@ -392,11 +412,14 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /**
      * Generate pay load with both JSON and XML formats for all applications.
+     * 根据key中的编码信息 和 apps 来生成 需要被缓存的数据
      */
     private String getPayLoad(Key key, Applications apps) {
+        // 获取对应的编码器
         EncoderWrapper encoderWrapper = serverCodecs.getEncoder(key.getType(), key.getEurekaAccept());
         String result;
         try {
+            // 对数据进行编码并返回 这是返回的可能是已经压缩过的 或者 未压缩的
             result = encoderWrapper.encode(apps);
         } catch (Exception e) {
             logger.error("Failed to encode the payload for all apps", e);
@@ -427,21 +450,29 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /*
      * Generate pay load for the given key.
+     * 生成 需要被缓存的对象
      */
     private Value generatePayload(Key key) {
         Stopwatch tracer = null;
         try {
             String payload;
+            // 获取被缓存的对象
             switch (key.getEntityType()) {
+                // 如果是应用对象
                 case Application:
+                    // 获取 region信息
                     boolean isRemoteRegionRequested = key.hasRegions();
 
+                    // 如果是 针对全部应用的
                     if (ALL_APPS.equals(key.getName())) {
                         if (isRemoteRegionRequested) {
+                            // 启动对应的秒表
                             tracer = serializeAllAppsWithRemoteRegionTimer.start();
+                            // 根据指定的region 获取 application
                             payload = getPayLoad(key, registry.getApplicationsFromMultipleRegions(key.getRegions()));
                         } else {
                             tracer = serializeAllAppsTimer.start();
+                            // 未指定region情况下 根据 其他条件 判断获取那些 应用
                             payload = getPayLoad(key, registry.getApplications());
                         }
                     } else if (ALL_APPS_DELTA.equals(key.getName())) {
@@ -522,15 +553,22 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /**
      * The class that stores payload in both compressed and uncompressed form.
+     * 同时以 压缩 和未压缩 方式保存数据
      *
      */
     public class Value {
+
+        /**
+         * 负荷对象 ??? 应该就是 未压缩的数据
+         */
         private final String payload;
         private byte[] gzipped;
 
         public Value(String payload) {
             this.payload = payload;
+            // 代表 维护的不是 空数据
             if (!EMPTY_PAYLOAD.equals(payload)) {
+                // 开始计算时间
                 Stopwatch tracer = compressPayloadTimer.start();
                 try {
                     ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -546,18 +584,28 @@ public class ResponseCacheImpl implements ResponseCache {
                     gzipped = null;
                 } finally {
                     if (tracer != null) {
+                        // 统计时间
                         tracer.stop();
                     }
                 }
+                // 如果是空数据 gzipped 就不需要处理
             } else {
                 gzipped = null;
             }
         }
 
+        /**
+         * 获取未压缩数据
+         * @return
+         */
         public String getPayload() {
             return payload;
         }
 
+        /**
+         * 获取压缩数据
+         * @return
+         */
         public byte[] getGzipped() {
             return gzipped;
         }

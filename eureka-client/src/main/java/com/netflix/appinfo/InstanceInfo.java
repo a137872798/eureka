@@ -304,10 +304,17 @@ public class InstanceInfo {
                 ", dataCenterInfo = " + this.dataCenterInfo;
     }
 
+    /**
+     * 从 meta 中 移除指定的元数据  该方法是干嘛用的
+     * @param metadata
+     * @return
+     */
     private Map<String, String> removeMetadataMapLegacyValues(Map<String, String> metadata) {
+        // 如果 meta 中 @class是 emptyMap  就移除
         if (InstanceInfoSerializer.METADATA_COMPATIBILITY_VALUE.equals(metadata.get(InstanceInfoSerializer.METADATA_COMPATIBILITY_KEY))) {
             // TODO this else if can be removed once the server no longer uses legacy json
             metadata.remove(InstanceInfoSerializer.METADATA_COMPATIBILITY_KEY);
+            // 如果 meta 中 class 是 emptyMap 就移除
         } else if (InstanceInfoSerializer.METADATA_COMPATIBILITY_VALUE.equals(metadata.get("class"))) {
             // TODO this else if can be removed once the server no longer uses legacy xml
             metadata.remove("class");

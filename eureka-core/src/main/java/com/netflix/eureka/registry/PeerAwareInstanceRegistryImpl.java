@@ -98,6 +98,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     private long startupTime = 0;
     private boolean peerInstancesTransferEmptyOnStartup = true;
 
+    /**
+     * client实例会触发的动作
+     */
     public enum Action {
         Heartbeat, Register, Cancel, StatusUpdate, DeleteStatusOverride;
 
@@ -133,6 +136,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     ) {
         super(serverConfig, clientConfig, serverCodecs);
         this.eurekaClient = eurekaClient;
+        // 该对象内部维护了 一个 currentBucket lastBucket
         this.numberOfReplicationsLastMin = new MeasuredRate(1000 * 60 * 1);
         // We first check if the instance is STARTING or DOWN, then we check explicit overrides,
         // then we check the status of a potentially existing lease.

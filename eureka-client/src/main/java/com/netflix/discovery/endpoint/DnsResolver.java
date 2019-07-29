@@ -125,6 +125,7 @@ public final class DnsResolver {
 
     /**
      * Looks up the DNS name provided in the JNDI context.
+     * 从文件中 查询DNS 信息
      */
     public static Set<String> getCNamesFromTxtRecord(String discoveryDnsName) throws NamingException {
         Attributes attrs = getDirContext().getAttributes(discoveryDnsName, new String[]{TXT_RECORD_TYPE});

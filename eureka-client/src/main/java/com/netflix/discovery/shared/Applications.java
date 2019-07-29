@@ -66,8 +66,17 @@ import com.thoughtworks.xstream.annotations.XStreamImplicit;
 @JsonRootName("applications")
 public class Applications {
     private static class VipIndexSupport {
+        /**
+         * 同步链表
+         */
         final AbstractQueue<InstanceInfo> instances = new ConcurrentLinkedQueue<>();
+        /**
+         * 轮询的 下标 起始值为0
+         */
         final AtomicLong roundRobinIndex = new AtomicLong(0);
+        /**
+         * 内部维护了一组 服务实例
+         */
         final AtomicReference<List<InstanceInfo>> vipList = new AtomicReference<List<InstanceInfo>>(Collections.emptyList());
 
         public AtomicLong getRoundRobinIndex() {
@@ -81,16 +90,24 @@ public class Applications {
 
     private static final String STATUS_DELIMITER = "_";
 
+    /**
+     * 这组应用对应的 hashCode
+     */
     private String appsHashCode;
+
     private Long versionDelta;
     @XStreamImplicit
     private final AbstractQueue<Application> applications;
+    /**
+     * 该组 apps 中 appName 与 app 的键值对
+     */
     private final Map<String, Application> appNameApplicationMap;
     private final Map<String, VipIndexSupport> virtualHostNameAppMap;
     private final Map<String, VipIndexSupport> secureVirtualHostNameAppMap;
 
     /**
      * Create a new, empty Eureka application list.
+     * 一般不会通过该方式 进行创建
      */
     public Applications() {
         this(null, -1L, Collections.emptyList());
@@ -99,14 +116,15 @@ public class Applications {
     /**
      * Note that appsHashCode and versionDelta key names are formatted in a
      * custom/configurable way.
+     * 使用 json 字符串 初始化
      */
     @JsonCreator
     public Applications(@JsonProperty("appsHashCode") String appsHashCode,
             @JsonProperty("versionDelta") Long versionDelta,
             @JsonProperty("application") List<Application> registeredApplications) {
-        //这里为什么要使用并发队列来维护 当前能获取的所有应用  应该是有多个时机 会修改 该列表 该队列是通过 自旋+CAS 也就是乐观锁 实现 添加元素的  适合于
-        //竞争不激烈 并且 对可见性要求 高的场景 读写数组 允许读取到过期数据那么 如果某一时刻 读取到 过期数据 且进行缓存 那么在下次更新缓存列表前 都会访问该失效服务 所以
-        //不能使用基于 读写数组的 实现
+        //这里为什么要使用并发队列来维护 当前能获取的所有应用  应该是有多个时机 会修改该列表 该队列是通过 自旋+CAS 也就是乐观锁 实现 添加元素的  适合于
+        //竞争不激烈 并且 对可见性要求高的场景 copyOnWrite数组 允许读取到过期数据那么 如果某一时刻 读取到 过期数据 且进行缓存 那么在下次更新缓存列表前 都会访问该失效服务 所以
+        //不能使用基于 copyOnWrite数组数组的 实现
         this.applications = new ConcurrentLinkedQueue<Application>();
         this.appsHashCode = appsHashCode;
         this.appNameApplicationMap = new ConcurrentHashMap<String, Application>();
@@ -115,6 +133,7 @@ public class Applications {
         this.versionDelta = versionDelta;
 
         for (Application app : registeredApplications) {
+            // 这里会同时给 3个map 填充数据
             this.addApplication(app);
         }
     }
@@ -124,9 +143,11 @@ public class Applications {
      *
      * @param app
      *            the <em>application</em> to be added.
+     *            将本应用实例保存到list 中
      */
     public void addApplication(Application app) {
         appNameApplicationMap.put(app.getName().toUpperCase(Locale.ROOT), app);
+        // 将app 根据情况设置到2个map中的一个
         addInstancesToVIPMaps(app, this.virtualHostNameAppMap, this.secureVirtualHostNameAppMap);
         applications.add(app);
     }
@@ -161,9 +182,11 @@ public class Applications {
      *            the virtual hostname for which the instances need to be
      *            returned.
      * @return list of <em>instances</em>.
+     *      通过虚拟主机 获取 服务实例信息
      */
     public List<InstanceInfo> getInstancesByVirtualHostName(String virtualHostName) {
         return Optional.ofNullable(this.virtualHostNameAppMap.get(virtualHostName.toUpperCase(Locale.ROOT)))
+                // VipIndexSupport中会维护一个VipList
             .map(VipIndexSupport::getVipList)
             .map(AtomicReference::get)
             .orElseGet(Collections::emptyList); 
@@ -177,6 +200,7 @@ public class Applications {
      *            the virtual hostname for which the secure instances need to be
      *            returned.
      * @return list of <em>instances</em>.
+     * 同上
      */
     public List<InstanceInfo> getInstancesBySecureVirtualHostName(String secureVirtualHostName) {
         return Optional.ofNullable(this.secureVirtualHostNameAppMap.get(secureVirtualHostName.toUpperCase(Locale.ROOT)))
@@ -232,10 +256,12 @@ public class Applications {
      *
      * @return the internal hash code representation indicating the information
      *         about the instances.
+     *         重新生成一个hashCode
      */
     @JsonIgnore
     public String getReconcileHashCode() {
         TreeMap<String, AtomicInteger> instanceCountMap = new TreeMap<String, AtomicInteger>();
+        // 将数据填充到容器中
         populateInstanceCountMap(instanceCountMap);
         return getReconcileHashCode(instanceCountMap);
     }
@@ -304,6 +330,14 @@ public class Applications {
                 instanceRegionChecker);
     }
 
+    /**
+     * 将实例数据打乱
+     * @param filterUpInstances
+     * @param indexByRemoteRegions
+     * @param remoteRegionsRegistry
+     * @param clientConfig
+     * @param instanceRegionChecker
+     */
     private void shuffleInstances(boolean filterUpInstances, 
             boolean indexByRemoteRegions,
             @Nullable Map<String, Applications> remoteRegionsRegistry, 
@@ -311,14 +345,18 @@ public class Applications {
             @Nullable InstanceRegionChecker instanceRegionChecker) {
         Map<String, VipIndexSupport> secureVirtualHostNameAppMap = new HashMap<>();
         Map<String, VipIndexSupport> virtualHostNameAppMap = new HashMap<>();
+        // 遍历所有的  app
         for (Application application : appNameApplicationMap.values()) {
+            // 将应用中的 实例信息 打乱
             if (indexByRemoteRegions) {
                 application.shuffleAndStoreInstances(remoteRegionsRegistry, clientConfig, instanceRegionChecker);
             } else {
                 application.shuffleAndStoreInstances(filterUpInstances);
             }
+            // 是否属于 vip 添加到对应的容器
             this.addInstancesToVIPMaps(application, virtualHostNameAppMap, secureVirtualHostNameAppMap);
         }
+        // 对2个 virtualHostName  也打乱
         shuffleAndFilterInstances(virtualHostNameAppMap, filterUpInstances);
         shuffleAndFilterInstances(secureVirtualHostNameAppMap, filterUpInstances);
 
@@ -349,7 +387,7 @@ public class Applications {
     /**
      * Shuffle the instances and filter for only {@link InstanceStatus#UP} if
      * required.
-     *
+     * 打乱 实例信息
      */
     private void shuffleAndFilterInstances(Map<String, VipIndexSupport> srcMap, boolean filterUpInstances) {
 
@@ -391,17 +429,20 @@ public class Applications {
      * 
      * @param app
      *            - the applications for which the instances need to be added.
+     *            将 app设置到 map中
      */
     private void addInstancesToVIPMaps(Application app, Map<String, VipIndexSupport> virtualHostNameAppMap,
             Map<String, VipIndexSupport> secureVirtualHostNameAppMap) {
         // Check and add the instances to the their respective virtual host name
         // mappings
         for (InstanceInfo info : app.getInstances()) {
+            // 存在 vipAddress 就保存到 vip 的容器
             String vipAddresses = info.getVIPAddress();
             if (vipAddresses != null) {
                 addInstanceToMap(info, vipAddresses, virtualHostNameAppMap);
             }
 
+            // 存在 secureVipAddress 就保存到 secureVip 的容器
             String secureVipAddresses = info.getSecureVipAddress();
             if (secureVipAddresses != null) {
                 addInstanceToMap(info, secureVipAddresses, secureVirtualHostNameAppMap);

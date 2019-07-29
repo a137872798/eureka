@@ -29,6 +29,7 @@ import com.netflix.eureka.Version;
  * initially triggered the current request.</p>
  *
  * @author Karthik Ranganathan, Greg Kim
+ * 与线程绑定的版本信息
  */
 public final class CurrentRequestVersion {
 

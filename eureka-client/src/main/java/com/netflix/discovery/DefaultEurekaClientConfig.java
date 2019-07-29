@@ -368,6 +368,7 @@ public class DefaultEurekaClientConfig implements EurekaClientConfig {
      */
     @Override
     public String[] getAvailabilityZones(String region) {
+        // 尝试获取  namesapce + region + "." + availabilityZones 对应的 zone 如果没有就使用defaultZone作为默认的地区
         return configInstance
                 .getStringProperty(
                         namespace + region + "." + CONFIG_AVAILABILITY_ZONE_PREFIX,

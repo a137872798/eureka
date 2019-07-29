@@ -6,8 +6,14 @@ import com.netflix.eureka.Version;
 import javax.annotation.Nullable;
 import java.util.Arrays;
 
+/**
+ * key 代表能唯一标识某一client 的对象 Value 为 服务信息
+ */
 public class Key {
 
+    /**
+     * 代表 对应的 value 是使用 json 还是 xml进行编解码
+     */
     public enum KeyType {
         JSON, XML
     }
@@ -22,9 +28,15 @@ public class Key {
     private final String entityName;
     private final String[] regions;
     private final KeyType requestType;
+    /**
+     * 本次请求的 版本 默认 是 V2  这个属性是 eureka框架版本相关的 与服务无关
+     */
     private final Version requestVersion;
     private final String hashKey;
     private final EntityType entityType;
+    /**
+     * 代表缓存的数据是否要压缩
+     */
     private final EurekaAccept eurekaAccept;
 
     public Key(EntityType entityType, String entityName, KeyType type, Version v, EurekaAccept eurekaAccept) {

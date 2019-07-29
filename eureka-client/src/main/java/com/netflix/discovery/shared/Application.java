@@ -46,6 +46,7 @@ import com.thoughtworks.xstream.annotations.XStreamOmitField;
 /**
  * The application class holds the list of instances for a particular
  * application.
+ * 代表一个 应用的信息 每个应用下可以包含多个服务实例
  *
  * @author Karthik Ranganathan
  *
@@ -64,16 +65,31 @@ public class Application {
                 + shuffledInstances + ", instancesMap=" + instancesMap + "]";
     }
 
+    /**
+     * 应用名
+     */
     private String name;
 
+    /**
+     * 数据是否发生过改变
+     */
     @XStreamOmitField
     private volatile boolean isDirty = false;
 
+    /**
+     * 一个 app中可以携带多个 instanceInfo对象
+     */
     @XStreamImplicit
     private final Set<InstanceInfo> instances;
 
+    /**
+     * 被随机排序后的 instance
+     */
     private final AtomicReference<List<InstanceInfo>> shuffledInstances;
 
+    /**
+     * 实例 map
+     */
     private final Map<String, InstanceInfo> instancesMap;
 
     public Application() {
@@ -84,6 +100,7 @@ public class Application {
 
     public Application(String name) {
         this();
+        // StringCache 内部使用一个WeakHashMap
         this.name = StringCache.intern(name);
     }
 
@@ -102,12 +119,15 @@ public class Application {
      *
      * @param i
      *            the instance info object to be added.
+     *            将app 下的每个 实例 添加进来
      */
     public void addInstance(InstanceInfo i) {
+        // 维护了 instanceId 和 instance的映射
         instancesMap.put(i.getId(), i);
         synchronized (instances) {
             instances.remove(i);
             instances.add(i);
+            // 标记发生过改变
             isDirty = true;
         }
     }
@@ -117,6 +137,7 @@ public class Application {
      *
      * @param i
      *            the instance info object to be removed.
+     *            从一个app(应用) 中移除某个实例
      */
     public void removeInstance(InstanceInfo i) {
         removeInstance(i, true);
@@ -132,9 +153,11 @@ public class Application {
      * </p>
      *
      * @return the list of shuffled instances associated with this application.
+     *      获取instances 列表
      */
     @JsonProperty("instance")
     public List<InstanceInfo> getInstances() {
+        // 如果没有获取到 就调用getInstancesAsIsFromEureka  该方法实现就是直接返回了 instances
         return Optional.ofNullable(shuffledInstances.get()).orElseGet(this::getInstancesAsIsFromEureka);
     }
 
@@ -197,6 +220,7 @@ public class Application {
      * @param filterUpInstances
      *            indicates whether only the instances with status
      *            {@link InstanceStatus#UP} needs to be stored.
+     *            打乱顺序 并保存
      */
     public void shuffleAndStoreInstances(boolean filterUpInstances) {
         _shuffleAndStoreInstances(filterUpInstances, false, null, null, null);
@@ -208,39 +232,60 @@ public class Application {
                 instanceRegionChecker);
     }
 
+    /**
+     *
+     * @param filterUpInstances 代表是否只有 status = UP 的需要保存
+     * @param indexByRemoteRegions 按照 region 来进行 排序
+     * @param remoteRegionsRegistry 远端 region的 注册信息   string 应该是 region 然后对应 下面的 Applications 又对应到下面多个 Application
+     * @param clientConfig 客户端配置
+     * @param instanceRegionChecker
+     */
     private void _shuffleAndStoreInstances(boolean filterUpInstances, boolean indexByRemoteRegions,
                                            @Nullable Map<String, Applications> remoteRegionsRegistry,
                                            @Nullable EurekaClientConfig clientConfig,
                                            @Nullable InstanceRegionChecker instanceRegionChecker) {
         List<InstanceInfo> instanceInfoList;
         synchronized (instances) {
+            // 这里生成一个 副本对象就是不希望 修改该容器时 影响到源数据
             instanceInfoList = new ArrayList<InstanceInfo>(instances);
         }
+        // 如果设置了 根据 region 设置index  因为clientConfig 中维护了 zone 和 region的关系    regionChecker 需要借助它
         boolean remoteIndexingActive = indexByRemoteRegions && null != instanceRegionChecker && null != clientConfig
                 && null != remoteRegionsRegistry;
+        // 后面的标识 代表 只需要 status为 up的服务实例
         if (remoteIndexingActive || filterUpInstances) {
             Iterator<InstanceInfo> it = instanceInfoList.iterator();
             while (it.hasNext()) {
                 InstanceInfo instanceInfo = it.next();
+                // status 不是 up 的就要移除
                 if (filterUpInstances && InstanceStatus.UP != instanceInfo.getStatus()) {
                     it.remove();
+                    // 这个是代表是否需要将本地实例 转移到给定的 remoteRegionsRegistry 容器中
                 } else if (remoteIndexingActive) {
+                    //instanceInfo 中不存在 dataCenter 就返回 localRegion
                     String instanceRegion = instanceRegionChecker.getInstanceRegion(instanceInfo);
+                    // 如果获取到的不是本地 region
                     if (!instanceRegionChecker.isLocalRegion(instanceRegion)) {
+                        // 代表是 远端的region 那么获取远端region 的全部 applicaiton
                         Applications appsForRemoteRegion = remoteRegionsRegistry.get(instanceRegion);
                         if (null == appsForRemoteRegion) {
                             appsForRemoteRegion = new Applications();
+                            // 不存在就设置一个空对象
                             remoteRegionsRegistry.put(instanceRegion, appsForRemoteRegion);
                         }
 
+                        // 获取对应的 单个 应用
                         Application remoteApp =
                                 appsForRemoteRegion.getRegisteredApplications(instanceInfo.getAppName());
                         if (null == remoteApp) {
+                            // 添加默认实例
                             remoteApp = new Application(instanceInfo.getAppName());
                             appsForRemoteRegion.addApplication(remoteApp);
                         }
 
+                        // 这里代表的是 从 instances 中转换到了remoteRegionsRegistry 中
                         remoteApp.addInstance(instanceInfo);
+                        // 这种情况下并不是 数据无效 所以 markAsDirty 为 false
                         this.removeInstance(instanceInfo, false);
                         it.remove();
                     }
@@ -248,6 +293,7 @@ public class Application {
             }
 
         }
+        // 将数据打乱后 设置到 容器中
         Collections.shuffle(instanceInfoList, shuffleRandom);
         this.shuffledInstances.set(instanceInfoList);
     }
@@ -256,6 +302,7 @@ public class Application {
         instancesMap.remove(i.getId());
         synchronized (instances) {
             instances.remove(i);
+            // 如果需要设置成 被改变过 就修改isDirty
             if (markAsDirty) {
                 isDirty = true;
             }

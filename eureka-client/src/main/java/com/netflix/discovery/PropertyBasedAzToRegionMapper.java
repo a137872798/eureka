@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
+ * 从配置对象中 获取region 对应的zone
  * @author Nitesh Kant
  */
 public class PropertyBasedAzToRegionMapper extends AbstractAzToRegionMapper {

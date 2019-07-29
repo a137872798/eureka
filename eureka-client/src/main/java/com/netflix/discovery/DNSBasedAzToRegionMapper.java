@@ -10,6 +10,7 @@ import java.util.Set;
 /**
  * DNS-based region mapper that discovers regions via DNS TXT records.
  * @author Nitesh Kant
+ * 基于 DNS 的 zone 发现
  */
 public class DNSBasedAzToRegionMapper extends AbstractAzToRegionMapper {
 
