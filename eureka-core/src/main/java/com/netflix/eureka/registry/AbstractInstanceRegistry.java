@@ -69,7 +69,7 @@ import static com.netflix.eureka.util.EurekaMonitors.*;
  * </p>
  *
  * @author Karthik Ranganathan
- *
+ * 服务实例的默认实现
  */
 public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     private static final Logger logger = LoggerFactory.getLogger(AbstractInstanceRegistry.class);
@@ -77,9 +77,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     private static final String[] EMPTY_STR_ARRAY = new String[0];
     /**
      * 注册中心存放 服务实例的容器  第一级 key 是应用名 第二级应该是 以id 作为key 之类的
+     * Lease 是对服务实例InstanceInfo 的包装  服务中心的数据就是维护在该map中
      */
     private final ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
             = new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
+
     protected Map<String, RemoteRegionRegistry> regionNameVSRemoteRegistry = new HashMap<String, RemoteRegionRegistry>();
     protected final ConcurrentMap<String, InstanceStatus> overriddenInstanceStatusMap = CacheBuilder
             .newBuilder().initialCapacity(500)
@@ -106,31 +108,54 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     protected volatile int numberOfRenewsPerMinThreshold;
     protected volatile int expectedNumberOfClientsSendingRenews;
 
+    /**
+     * eureka 服务端配置
+     */
     protected final EurekaServerConfig serverConfig;
+    /**
+     * eureka 客户端配置
+     */
     protected final EurekaClientConfig clientConfig;
+    /**
+     * server 编解码器
+     */
     protected final ServerCodecs serverCodecs;
+    /**
+     * 用于 http 请求的 响应数据缓存
+     */
     protected volatile ResponseCache responseCache;
 
     /**
      * Create a new, empty instance registry.
+     * 创建 注册中心实例
      */
     protected AbstractInstanceRegistry(EurekaServerConfig serverConfig, EurekaClientConfig clientConfig, ServerCodecs serverCodecs) {
+        // 服务端配置
         this.serverConfig = serverConfig;
+        // 客户端配置
         this.clientConfig = clientConfig;
+        // 传入编解码器
         this.serverCodecs = serverCodecs;
+        // 可以看作固定大小的 同步队列对象
         this.recentCanceledQueue = new CircularQueue<Pair<Long, String>>(1000);
         this.recentRegisteredQueue = new CircularQueue<Pair<Long, String>>(1000);
 
+        // 该对象 内部 包含2个变量 currentBucket lastBucket lastBucket 会定时更新
         this.renewsLastMin = new MeasuredRate(1000 * 60 * 1);
 
+        // 启动定时任务 该任务用于移除没有在指定时间内更新租约信息的服务对象
         this.deltaRetentionTimer.schedule(getDeltaRetentionTask(),
                 serverConfig.getDeltaRetentionTimerIntervalInMs(),
                 serverConfig.getDeltaRetentionTimerIntervalInMs());
     }
 
+    /**
+     * 初始化 缓存对象
+     */
     @Override
     public synchronized void initializedResponseCache() {
         if (responseCache == null) {
+            // 使用服务端配置 以及 编解码器 初始化
             responseCache = new ResponseCacheImpl(serverConfig, serverCodecs, this);
         }
     }
@@ -1214,8 +1239,17 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 * serverConfig.getRenewalPercentThreshold());
     }
 
+    /**
+     * 代表租约信息发生了变更
+     */
     private static final class RecentlyChangedItem {
+        /**
+         * 该租约信息更新的时间
+         */
         private long lastUpdateTime;
+        /**
+         * 注册的 服务元数据信息
+         */
         private Lease<InstanceInfo> leaseInfo;
 
         public RecentlyChangedItem(Lease<InstanceInfo> lease) {
@@ -1297,15 +1331,24 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
     }
 
+    /**
+     * 该对象继承了 同步队列 做了 容量大小的控制
+     * @param <E>
+     */
     private class CircularQueue<E> extends ConcurrentLinkedQueue<E> {
         private int size = 0;
 
+        /**
+         * 初始化 队列大小
+         * @param size
+         */
         public CircularQueue(int size) {
             this.size = size;
         }
 
         @Override
         public boolean add(E e) {
+            // 判断是否还有空间可用
             this.makeSpaceIfNotAvailable();
             return super.add(e);
 
@@ -1313,6 +1356,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
         private void makeSpaceIfNotAvailable() {
             if (this.size() == size) {
+                // 移除队列中某个元素 保证大小不变
                 this.remove();
             }
         }
@@ -1336,13 +1380,19 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         return rule.apply(r, existingLease, isReplication).status();
     }
 
+    /**
+     * 定时任务
+     * @return
+     */
     private TimerTask getDeltaRetentionTask() {
         return new TimerTask() {
 
             @Override
             public void run() {
+                // 获取 变更的 租约信息
                 Iterator<RecentlyChangedItem> it = recentlyChangedQueue.iterator();
                 while (it.hasNext()) {
+                    // 代表 在一定时间内 没有将 应缓存的增量数据更新 就将该数据移除掉 如果服务没有续约的话 超过了指定时间 应该就会在这里被移除
                     if (it.next().getLastUpdateTime() <
                             System.currentTimeMillis() - serverConfig.getRetentionTimeInMSInDeltaQueue()) {
                         it.remove();

@@ -11,10 +11,13 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 /**
+ * 默认的编解码器对象
  * @author David Liu
  */
 @Singleton
 public class DefaultServerCodecs implements ServerCodecs {
+
+    // 4种类型的 编解码器
 
     protected final CodecWrapper fullJsonCodec;
     protected final CodecWrapper compactJsonCodec;

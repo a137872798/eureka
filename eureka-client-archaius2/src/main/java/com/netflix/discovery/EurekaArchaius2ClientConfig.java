@@ -37,6 +37,7 @@ public class EurekaArchaius2ClientConfig implements EurekaClientConfig {
         this.prefixedConfig = new InternalPrefixedConfig(configInstance, namespace);
     }
 
+    @Override
     public int getRegistryFetchIntervalSeconds() {
         return prefixedConfig.getInteger(REGISTRY_REFRESH_INTERVAL_KEY, 30);
     }

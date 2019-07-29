@@ -72,6 +72,7 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim
+ * 针对http 请求的响应缓存对象
  */
 public class ResponseCacheImpl implements ResponseCache {
 
@@ -103,6 +104,7 @@ public class ResponseCacheImpl implements ResponseCache {
      * requested by clients, we use this mapping to get all the keys with regions to be invalidated.
      * If we do not do this, any cached user requests containing region keys will not be invalidated and will stick
      * around till expiry. Github issue: https://github.com/Netflix/eureka/issues/118
+     * 该对象 代表 一个 简略的key （不携带region信息的） 下会维护多个相关且携带 region 的 key 当删除时 可以同时指定key value 删除确定的键值对
      */
     private final Multimap<Key, Key> regionSpecificKeys =
             Multimaps.newListMultimap(new ConcurrentHashMap<Key, Collection<Key>>(), new Supplier<List<Key>>() {
@@ -112,30 +114,57 @@ public class ResponseCacheImpl implements ResponseCache {
                 }
             });
 
+    /**
+     * 只读 缓存对象
+     */
     private final ConcurrentMap<Key, Value> readOnlyCacheMap = new ConcurrentHashMap<Key, Value>();
 
+    /**
+     * 允许读写的缓存对象 使用了google 的缓存容器
+     */
     private final LoadingCache<Key, Value> readWriteCacheMap;
+    /**
+     * 是否使用 readOnlyCacheMap
+     */
     private final boolean shouldUseReadOnlyResponseCache;
+    /**
+     * 该缓存所属的 registry
+     */
     private final AbstractInstanceRegistry registry;
+    /**
+     * 服务器配置对象
+     */
     private final EurekaServerConfig serverConfig;
+    /**
+     * 服务器 编解码器
+     */
     private final ServerCodecs serverCodecs;
 
     ResponseCacheImpl(EurekaServerConfig serverConfig, ServerCodecs serverCodecs, AbstractInstanceRegistry registry) {
         this.serverConfig = serverConfig;
         this.serverCodecs = serverCodecs;
+        // 获取是否使用只读缓存对象
         this.shouldUseReadOnlyResponseCache = serverConfig.shouldUseReadOnlyResponseCache();
         this.registry = registry;
 
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
+        // 构建缓存容器
         this.readWriteCacheMap =
+                // 设置初始容量
                 CacheBuilder.newBuilder().initialCapacity(serverConfig.getInitialCapacityOfResponseCache())
+                        // 设置缓存时间
                         .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
+                        // 设置缓存移除时的监听器
                         .removalListener(new RemovalListener<Key, Value>() {
                             @Override
                             public void onRemoval(RemovalNotification<Key, Value> notification) {
+                                // 被移除的缓存键
                                 Key removedKey = notification.getKey();
+                                // 缓存键中存在 地区信息
                                 if (removedKey.hasRegions()) {
+                                    // copy 一个不携带 region 的 缓存键
                                     Key cloneWithNoRegions = removedKey.cloneWithoutRegions();
+                                    // 因为 该map 对象是 Multimap 代表 一个key 会同时维护多个 value 这里必须同时指定键值对 才能正确删除
                                     regionSpecificKeys.remove(cloneWithNoRegions, removedKey);
                                 }
                             }

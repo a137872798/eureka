@@ -49,7 +49,7 @@ import com.netflix.eureka.util.EurekaMonitors;
  * {@link com.netflix.discovery.shared.Applications}.
  *
  * @author Karthik Ranganathan, Greg Kim
- *
+ * 该对象相当于 spring mvc 的 Controller   eureka 采用 CS 架构 eureka server 作为一个启动的应用  而eureka client 作为 客户端会将自身信息通过调用http 接口注册到server 上
  */
 @Path("/{version}/apps")
 @Produces({"application/xml", "application/json"})
@@ -65,6 +65,10 @@ public class ApplicationsResource {
     private final PeerAwareInstanceRegistry registry;
     private final ResponseCache responseCache;
 
+    /**
+     * 使用 @Inject 等价于 Spring @Auto
+     * @param eurekaServer
+     */
     @Inject
     ApplicationsResource(EurekaServerContext eurekaServer) {
         this.serverConfig = eurekaServer.getServerConfig();

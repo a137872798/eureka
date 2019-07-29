@@ -50,10 +50,12 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim
+ * 记录服务实例信息
  */
 @ProvidedBy(EurekaConfigBasedInstanceInfoProvider.class)
 @Serializer("com.netflix.discovery.converters.EntityBodyConverter")
 @XStreamAlias("instance")
+// 代表 json字符串的最外层使用 instance  {"instance":{...}}
 @JsonRootName("instance")
 public class InstanceInfo {
 
@@ -62,11 +64,23 @@ public class InstanceInfo {
     /**
      * {@link InstanceInfo} JSON and XML format for port information does not follow the usual conventions, which
      * makes its mapping complicated. This class represents the wire format for port information.
+     * 端口的包装对象
      */
     public static class PortWrapper {
+        /**
+         * 当前端口是否允许使用
+         */
         private final boolean enabled;
+        /**
+         * 端口信息
+         */
         private final int port;
 
+        /**
+         * 指定 使用JSON 反序列化时 会使用该构造函数  这里将 @enabled 改名为 enabled  $改名为 port
+         * @param enabled
+         * @param port
+         */
         @JsonCreator
         public PortWrapper(@JsonProperty("@enabled") boolean enabled, @JsonProperty("$") int port) {
             this.enabled = enabled;
@@ -84,17 +98,38 @@ public class InstanceInfo {
 
     private static final Logger logger = LoggerFactory.getLogger(InstanceInfo.class);
 
+    /**
+     * 使用的默认端口 7001
+     */
     public static final int DEFAULT_PORT = 7001;
+    /**
+     * 使用的默认安全端口 7002
+     */
     public static final int DEFAULT_SECURE_PORT = 7002;
+    /**
+     * 默认的 城市 id 为 US   因为 eureka 是实现 AP 的 注册中心 所以核心是 分区可用性 按区域来进行划分的
+     */
     public static final int DEFAULT_COUNTRY_ID = 1; // US
 
     // The (fixed) instanceId for this instanceInfo. This should be unique within the scope of the appName.
+    /**
+     * 该实例的唯一id
+     */
     private volatile String instanceId;
 
+    /**
+     * 应用名
+     */
     private volatile String appName;
+    /**
+     * 代表 该字段 不会被InstanceInfoConverter 影响???
+     */
     @Auto
     private volatile String appGroupName;
 
+    /**
+     * 该服务的ip地址
+     */
     private volatile String ipAddr;
 
     private static final String SID_DEFAULT = "na";
@@ -161,6 +196,35 @@ public class InstanceInfo {
         this.lastDirtyTimestamp = lastUpdatedTimestamp;
     }
 
+    /**
+     * 代表该对象 可以通过 json字符串进行初始化 并且 各个字段会按照属性进行设置
+     * @param instanceId
+     * @param appName
+     * @param appGroupName
+     * @param ipAddr
+     * @param sid
+     * @param port
+     * @param securePort
+     * @param homePageUrl
+     * @param statusPageUrl
+     * @param healthCheckUrl
+     * @param secureHealthCheckUrl
+     * @param vipAddress
+     * @param secureVipAddress
+     * @param countryId
+     * @param dataCenterInfo
+     * @param hostName
+     * @param status
+     * @param overriddenStatus
+     * @param overriddenStatusAlt
+     * @param leaseInfo
+     * @param isCoordinatingDiscoveryServer
+     * @param metadata
+     * @param lastUpdatedTimestamp
+     * @param lastDirtyTimestamp
+     * @param actionType
+     * @param asgName
+     */
     @JsonCreator
     public InstanceInfo(
             @JsonProperty("instanceId") String instanceId,
@@ -314,6 +378,9 @@ public class InstanceInfo {
     }
 
 
+    /**
+     * 代表服务的状态
+     */
     public enum InstanceStatus {
         UP, // Ready to receive traffic
         DOWN, // Do not send traffic- healthcheck callback failed
@@ -364,6 +431,9 @@ public class InstanceInfo {
         return true;
     }
 
+    /**
+     * 端口是 属于 安全端口 还是 非安全端口
+     */
     public enum PortType {
         SECURE, UNSECURE
     }

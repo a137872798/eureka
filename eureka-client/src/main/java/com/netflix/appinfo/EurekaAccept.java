@@ -17,13 +17,21 @@ import com.netflix.discovery.converters.wrappers.DecoderWrapper;
  * @author David Liu
  */
 public enum EurekaAccept {
+    // 压缩 or 非压缩
     full, compact;
 
+    /**
+     * 特殊的请求头
+     */
     public static final String HTTP_X_EUREKA_ACCEPT = "X-Eureka-Accept";
 
+    /**
+     * 用于存放常量的 容器
+     */
     private static final Map<String, EurekaAccept> decoderNameToAcceptMap = new HashMap<>();
 
     static {
+        // 设置键值对 : key 编解码器的名字 value 是否使用全压缩
         decoderNameToAcceptMap.put(CodecWrappers.getCodecName(LegacyJacksonJson.class), full);
         decoderNameToAcceptMap.put(CodecWrappers.getCodecName(JacksonJson.class), full);
         decoderNameToAcceptMap.put(CodecWrappers.getCodecName(XStreamJson.class), full);

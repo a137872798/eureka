@@ -20,6 +20,7 @@ import java.util.Map;
 import com.google.inject.ImplementedBy;
 
 /**
+ * 代表 一个 注册到 eurekaServer 的服务数据信息
  * Configuration information required by the instance to register with Eureka
  * server. Once registered, users can look up information from
  * {@link com.netflix.discovery.EurekaClient} based on virtual hostname (also called VIPAddress),
@@ -39,10 +40,12 @@ import com.google.inject.ImplementedBy;
  * @author Karthik Ranganathan
  *
  */
+// 该注解 标明了 该接口的默认实现类就是 CloudInstanceConfig
 @ImplementedBy(CloudInstanceConfig.class)
 public interface EurekaInstanceConfig {
 
     /**
+     * 获取 本服务实例的id  全局唯一
      * Get the unique Id (within the scope of the appName) of this instance to be registered with eureka.
      *
      * @return the (appname scoped) unique id for this instance
@@ -50,6 +53,7 @@ public interface EurekaInstanceConfig {
     String getInstanceId();
 
     /**
+     * 获取 应用名
      * Get the name of the application to be registered with eureka.
      *
      * @return string denoting the name.
@@ -57,6 +61,7 @@ public interface EurekaInstanceConfig {
     String getAppname();
 
     /**
+     * 获取应用组名
      * Get the name of the application group to be registered with eureka.
      *
      * @return string denoting the name.
@@ -64,6 +69,7 @@ public interface EurekaInstanceConfig {
     String getAppGroupName();
 
     /**
+     * 该服务是否允许获取流量???
      * Indicates whether the instance should be enabled for taking traffic as
      * soon as it is registered with eureka. Sometimes the application might
      * need to do some pre-processing before it is ready to take traffic.
@@ -75,6 +81,7 @@ public interface EurekaInstanceConfig {
     boolean isInstanceEnabledOnit();
 
     /**
+     * 获取 没有权限校验的端口
      * Get the <code>non-secure</code> port on which the instance should receive
      * traffic.
      *
@@ -83,6 +90,7 @@ public interface EurekaInstanceConfig {
     int getNonSecurePort();
 
     /**
+     * 获取 具备权限校验的端口
      * Get the <code>Secure port</code> on which the instance should receive
      * traffic.
      *
@@ -91,6 +99,7 @@ public interface EurekaInstanceConfig {
     int getSecurePort();
 
     /**
+     * 是否允许获取未校验的端口
      * Indicates whether the <code>non-secure</code> port should be enabled for
      * traffic or not.
      *
@@ -100,6 +109,7 @@ public interface EurekaInstanceConfig {
     boolean isNonSecurePortEnabled();
 
     /**
+     * 是否允许获取需要校验的端口
      * Indicates whether the <code>secure</code> port should be enabled for
      * traffic or not.
      *
@@ -108,6 +118,7 @@ public interface EurekaInstanceConfig {
     boolean getSecurePortEnabled();
 
     /**
+     * 发送心跳的最短间隔
      * Indicates how often (in seconds) the eureka client needs to send
      * heartbeats to eureka server to indicate that it is still alive. If the
      * heartbeats are not received for the period specified in
@@ -125,6 +136,7 @@ public interface EurekaInstanceConfig {
     int getLeaseRenewalIntervalInSeconds();
 
     /**
+     * 最迟允许多久没有收到心跳后 从服务列表中移除该服务对象
      * Indicates the time in seconds that the eureka server waits since it
      * received the last heartbeat before it can remove this instance from its
      * view and there by disallowing traffic to this instance.
@@ -143,6 +155,7 @@ public interface EurekaInstanceConfig {
     int getLeaseExpirationDurationInSeconds();
 
     /**
+     * 获取虚拟主机名
      * Gets the virtual host name defined for this instance.
      *
      * <p>
@@ -158,6 +171,7 @@ public interface EurekaInstanceConfig {
     String getVirtualHostName();
 
     /**
+     * 获取安全的虚拟主机名
      * Gets the secure virtual host name defined for this instance.
      *
      * <p>
@@ -183,18 +197,20 @@ public interface EurekaInstanceConfig {
     String getASGName();
 
     /**
+     * 获取主机名  并且是唯一的
      * Gets the hostname associated with this instance. This is the exact name
      * that would be used by other instances to make calls.
      *
      * @param refresh
      *            true if the information needs to be refetched, false
-     *            otherwise.
+     *            otherwise.  代表调用该方法时 会触发一次 fetch
      * @return hostname of this instance which is identifiable by other
      *         instances for making remote calls.
      */
     String getHostName(boolean refresh);
 
     /**
+     * 获取元数据信息
      * Gets the metadata name/value pairs associated with this instance. This
      * information is sent to eureka server and can be used by other instances.
      *
@@ -203,6 +219,7 @@ public interface EurekaInstanceConfig {
     Map<String, String> getMetadataMap();
 
     /**
+     * 获取数据中心数据
      * Returns the data center this instance is deployed. This information is
      * used to get some AWS specific instance information if the instance is
      * deployed in AWS.
@@ -213,6 +230,7 @@ public interface EurekaInstanceConfig {
     DataCenterInfo getDataCenterInfo();
 
     /**
+     * 获取ip 地址
      * Get the IPAdress of the instance. This information is for academic
      * purposes only as the communication from other instances primarily happen
      * using the information supplied in {@link #getHostName(boolean)}.
@@ -222,6 +240,7 @@ public interface EurekaInstanceConfig {
     String getIpAddress();
 
     /**
+     * 获取 该服务实例的 状态页路径
      * Gets the relative status page {@link java.net.URL} <em>Path</em> for this
      * instance. The status page URL is then constructed out of the
      * {@link #getHostName(boolean)} and the type of communication - secure or
@@ -239,6 +258,7 @@ public interface EurekaInstanceConfig {
     String getStatusPageUrlPath();
 
     /**
+     * 获取 服务实例的状态页
      * Gets the absolute status page {@link java.net.URL} for this instance. The users
      * can provide the {@link #getStatusPageUrlPath()} if the status page
      * resides in the same instance talking to eureka, else in the cases where
@@ -259,6 +279,7 @@ public interface EurekaInstanceConfig {
     String getStatusPageUrl();
 
     /**
+     * 获取主机页路径
      * Gets the relative home page {@link java.net.URL} <em>Path</em> for this instance.
      * The home page URL is then constructed out of the
      * {@link #getHostName(boolean)} and the type of communication - secure or
@@ -293,6 +314,7 @@ public interface EurekaInstanceConfig {
     String getHomePageUrl();
 
     /**
+     * 获取健康检查路径
      * Gets the relative health check {@link java.net.URL} <em>Path</em> for this
      * instance. The health check page URL is then constructed out of the
      * {@link #getHostName(boolean)} and the type of communication - secure or
@@ -311,6 +333,7 @@ public interface EurekaInstanceConfig {
     String getHealthCheckUrlPath();
 
     /**
+     * 获取健康检查url
      * Gets the absolute health check page {@link java.net.URL} for this instance. The
      * users can provide the {@link #getHealthCheckUrlPath()} if the health
      * check page resides in the same instance talking to eureka, else in the
@@ -332,6 +355,7 @@ public interface EurekaInstanceConfig {
     String getHealthCheckUrl();
 
     /**
+     * 获取权限校验url
      * Gets the absolute secure health check page {@link java.net.URL} for this instance.
      * The users can provide the {@link #getSecureHealthCheckUrl()} if the
      * health check page resides in the same instance talking to eureka, else in
@@ -353,6 +377,7 @@ public interface EurekaInstanceConfig {
     String getSecureHealthCheckUrl();
 
     /**
+     * 获取 地址解析的默认顺序
      * An instance's network addresses should be fully expressed in it's {@link DataCenterInfo}.
      * For example for instances in AWS, this will include the publicHostname, publicIp,
      * privateHostname and privateIp, when available. The {@link com.netflix.appinfo.InstanceInfo}
@@ -368,6 +393,7 @@ public interface EurekaInstanceConfig {
     String[] getDefaultAddressResolutionOrder();
 
     /**
+     * 获取命名空间
      * Get the namespace used to find properties.
      * @return the namespace used to find properties.
      */

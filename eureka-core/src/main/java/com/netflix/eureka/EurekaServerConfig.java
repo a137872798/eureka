@@ -35,7 +35,7 @@ import com.netflix.eureka.aws.AwsBindingStrategy;
  * </p>
  *
  * @author Karthik Ranganathan
- *
+ * eureka 客户端配置对象
  */
 public interface EurekaServerConfig {
 
@@ -109,6 +109,7 @@ public interface EurekaServerConfig {
      * </p>
      *
      * @return true to enable self preservation, false otherwise.
+     * 该服务是否开启自我保护
      */
     boolean shouldEnableSelfPreservation();
 
@@ -124,6 +125,7 @@ public interface EurekaServerConfig {
      *
      * @return value between 0 and 1 indicating the percentage. For example,
      *         <code>85%</code> will be specified as <code>0.85</code>.
+     *         代表续约的 阈值
      */
     double getRenewalPercentThreshold();
 
@@ -132,6 +134,7 @@ public interface EurekaServerConfig {
      * {@link #getRenewalPercentThreshold()} needs to be updated.
      *
      * @return time in milliseconds indicating the interval.
+     *      获取续约阈值的更新间隔
      */
     int getRenewalThresholdUpdateIntervalMs();
 
@@ -142,6 +145,7 @@ public interface EurekaServerConfig {
      * expected.
      *
      * @return time in seconds indicating the expected interval
+     *      获取预期的续约间隔 这里 renew  也就代表心跳检测
      */
     int getExpectedClientRenewalIntervalSeconds();
 
@@ -155,10 +159,12 @@ public interface EurekaServerConfig {
      * </p>
      *
      * @return timer in milliseconds indicating the interval.
+     *      获取对端节点的 更新间隔
      */
     int getPeerEurekaNodesUpdateIntervalMs();
 
     /**
+     * 复制的数据是否要被压缩
      * If set to true, the replicated data send in the request will be always compressed.
      * This does not define response path, which is driven by "Accept-Encoding" header.
      */

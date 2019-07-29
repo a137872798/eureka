@@ -24,16 +24,23 @@ import com.netflix.eureka.resources.ASGResource;
 import java.util.List;
 
 /**
+ * 增加了 一些 是否允许被对端感知的 接口
  * @author Tomasz Bak
  */
 public interface PeerAwareInstanceRegistry extends InstanceRegistry {
 
+    /**
+     * 通过节点列表来初始化 对端信息
+     * @param peerEurekaNodes
+     * @throws Exception
+     */
     void init(PeerEurekaNodes peerEurekaNodes) throws Exception;
 
     /**
      * Populates the registry information from a peer eureka node. This
      * operation fails over to other nodes until the list is exhausted if the
      * communication fails.
+     * 将对端节点的信息 填充到注册表中 如果失败就 轮询到下个节点 直到所有节点都失败
      */
     int syncUp();
 
@@ -46,10 +53,22 @@ public interface PeerAwareInstanceRegistry extends InstanceRegistry {
      *
      * @return false - if the instances count from a replica transfer returned
      *         zero and if the wait time has not elapsed, otherwise returns true
+     *         该注册中心当前是否允许访问
      */
      boolean shouldAllowAccess(boolean remoteRegionRequired);
 
+    /**
+     * 将服务实例信息 注册到注册中心
+     * @param info
+     * @param isReplication  是否复制
+     */
      void register(InstanceInfo info, boolean isReplication);
 
+    /**
+     * 更新状态
+     * @param asgName
+     * @param newStatus
+     * @param isReplication
+     */
      void statusUpdate(final String asgName, final ASGResource.ASGStatus newStatus, final boolean isReplication);
 }

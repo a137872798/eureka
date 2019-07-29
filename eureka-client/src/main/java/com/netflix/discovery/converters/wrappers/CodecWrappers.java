@@ -27,6 +27,7 @@ import com.netflix.discovery.shared.transport.jersey.EurekaJerseyClientImpl;
  * {@link EurekaJerseyClientImpl.EurekaJerseyClientBuilder#withEncoderWrapper(EncoderWrapper)}
  *
  * @author David Liu
+ * 编解码器包装对象静态类 内部维护了所有的 CodecWrapper 该对象统一了 访问方式
  */
 public final class CodecWrappers {
 
@@ -34,6 +35,7 @@ public final class CodecWrappers {
 
     /**
      * For transition use: register a new codec wrapper.
+     * 应该是在 初始化时 将所有 编解码器注册进去
      */
     public static void registerWrapper(CodecWrapper wrapper) {
         CODECS.put(wrapper.codecName(), wrapper);
@@ -47,11 +49,17 @@ public final class CodecWrappers {
         return getCodec(getCodecName(clazz));
     }
 
+    /**
+     * 通过编码器的名字 获取对应的编码器
+     * @param name
+     * @return
+     */
     public static synchronized CodecWrapper getCodec(String name) {
         if (name == null) {
             return null;
         }
 
+        // 延迟初始化  这样就可以不提前register了      synchronized 应该是针对这块做同步
         if (!CODECS.containsKey(name)) {
             CodecWrapper wrapper = create(name);
             if (wrapper != null) {
@@ -66,6 +74,11 @@ public final class CodecWrappers {
         return getEncoder(getCodecName(clazz));
     }
 
+    /**
+     * 从 codec 中 获取CodecWrapper 这里不使用外观模式 有可能会被 别人强转为 CodecWrapper 可以考虑将CodecWrapper 中设置2个内部类 来分来调用
+     * @param name
+     * @return
+     */
     public static synchronized EncoderWrapper getEncoder(String name) {
         if (name == null) {
             return null;
@@ -116,6 +129,11 @@ public final class CodecWrappers {
         return CODECS.get(name);
     }
 
+    /**
+     * 根据名字来 创建对应的编解码器
+     * @param name
+     * @return
+     */
     private static CodecWrapper create(String name) {
         if (getCodecName(JacksonJson.class).equals(name)) {
             return new JacksonJson();

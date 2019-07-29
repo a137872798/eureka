@@ -35,7 +35,7 @@ public interface LookupService<T> {
      * @param appName
      * @return a {@link Application} or null if we couldn't locate any app of
      *         the requested appName
-     *         从所有注册在容器中的应用中 获取指定应用
+     *         从所有注册在容器中的应用中 获取指定应用 这里的Application 有可能通过装饰器模式 内部维护一个 list吗???
      */
     Application getApplication(String appName);
 
@@ -56,7 +56,7 @@ public interface LookupService<T> {
      * @param id
      * @return {@link List} of {@link InstanceInfo}s or
      *         {@link java.util.Collections#emptyList()}
-     *         根据 id 直接获取到实例列表
+     *         根据 id 直接获取到实例列表 一个实例信息 有可能对应 多个 Application
      */
     List<InstanceInfo> getInstancesById(String id);
 

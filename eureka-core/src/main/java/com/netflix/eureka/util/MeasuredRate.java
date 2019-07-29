@@ -26,26 +26,49 @@ import org.slf4j.LoggerFactory;
  * Utility class for getting a count in last X milliseconds.
  *
  * @author Karthik Ranganathan,Greg Kim
+ * 具备测量比率的能力
  */
 public class MeasuredRate {
     private static final Logger logger = LoggerFactory.getLogger(MeasuredRate.class);
+
+    /**
+     * 最后一个 桶
+     */
     private final AtomicLong lastBucket = new AtomicLong(0);
+    /**
+     * 当前桶
+     */
     private final AtomicLong currentBucket = new AtomicLong(0);
 
+    /**
+     * 获取样本的时间间隔???
+     */
     private final long sampleInterval;
+    /**
+     * 定时器对象 内部使用单线程 + 二叉堆实现
+     */
     private final Timer timer;
 
+    /**
+     * 当前是否活跃 （也就是定时器是否启用）
+     */
     private volatile boolean isActive;
 
     /**
      * @param sampleInterval in milliseconds
+     *                       设置获取样本的时间间隔
      */
     public MeasuredRate(long sampleInterval) {
         this.sampleInterval = sampleInterval;
+        // 创建定时器对象
         this.timer = new Timer("Eureka-MeasureRateTimer", true);
+        // 默认定时器处于关闭状态
         this.isActive = false;
     }
 
+    /**
+     * 启动定时任务
+     */
     public synchronized void start() {
         if (!isActive) {
             timer.schedule(new TimerTask() {
@@ -54,6 +77,7 @@ public class MeasuredRate {
                 public void run() {
                     try {
                         // Zero out the current bucket.
+                        // 该数值用来更新 lastBucket 的值
                         lastBucket.set(currentBucket.getAndSet(0));
                     } catch (Throwable e) {
                         logger.error("Cannot reset the Measured Rate", e);
@@ -74,6 +98,7 @@ public class MeasuredRate {
 
     /**
      * Returns the count in the last sample interval.
+     * 获取当前的桶数
      */
     public long getCount() {
         return lastBucket.get();
@@ -81,6 +106,7 @@ public class MeasuredRate {
 
     /**
      * Increments the count in the current sample interval.
+     * 增加当前桶数
      */
     public void increment() {
         currentBucket.incrementAndGet();

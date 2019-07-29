@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 /**
+ * 编码器
  * @author David Liu
  */
 public interface EncoderWrapper extends CodecWrapperBase {

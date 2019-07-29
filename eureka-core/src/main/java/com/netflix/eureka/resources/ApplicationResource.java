@@ -47,18 +47,27 @@ import org.slf4j.LoggerFactory;
  * {@link com.netflix.discovery.shared.Application}.
  *
  * @author Karthik Ranganathan, Greg Kim
- *
+ * 该处理器是用于 注册服务的   @Produces 代表该对象会返回 application/xml 或者 application/json 格式的数据 类似在 controller 上加 @ResponseBody
  */
 @Produces({"application/xml", "application/json"})
 public class ApplicationResource {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationResource.class);
 
     /**
-     * 应用名
+     * 应用名  eurekaServer 在启动时 就会设置 应用名
      */
     private final String appName;
+    /**
+     * 该服务器的配置对象
+     */
     private final EurekaServerConfig serverConfig;
+    /**
+     * 该 controller 只是用于接收请求 真正进行注册的 逻辑还是由 registry 对象来实现
+     */
     private final PeerAwareInstanceRegistry registry;
+    /**
+     * 缓存对象 该对象时从 registry 中获取的
+     */
     private final ResponseCache responseCache;
 
     ApplicationResource(String appName,
@@ -84,11 +93,17 @@ public class ApplicationResource {
      *            JSON or XML data.
      * @return the response containing information about a particular
      *         application.
+     *         通过GET 方式 暴露内部的 服务列表
      */
     @GET
-    public Response getApplication(@PathParam("version") String version,
+    public Response getApplication(
+            // 应该是 从 url 上获取 version 的信息
+            @PathParam("version") String version,
+                                   // 从请求头获取Accept 信息
                                    @HeaderParam("Accept") final String acceptHeader,
+                                   // 特殊的请求头
                                    @HeaderParam(EurekaAccept.HTTP_X_EUREKA_ACCEPT) String eurekaAccept) {
+        // 判断当前注册中心是否 允许访问 禁止的话返回  403
         if (!registry.shouldAllowAccess(false)) {
             return Response.status(Status.FORBIDDEN).build();
         }

@@ -32,11 +32,14 @@ import com.netflix.eureka.registry.AbstractInstanceRegistry;
  * @author Karthik Ranganathan, Greg Kim
  *
  * @param <T>
+ *     抽象出 具备 更新 健康检查 续约 的实例
+ *     Lease（租约）
  */
 public interface LeaseManager<T> {
 
     /**
      * Assign a new {@link Lease} to the passed in {@link T}.
+     * 具备将自身信息 注册到 eurekaServer 上的能力
      *
      * @param r
      *            - T to register
@@ -49,6 +52,7 @@ public interface LeaseManager<T> {
     /**
      * Cancel the {@link Lease} associated w/ the passed in <code>appName</code>
      * and <code>id</code>.
+     * 关闭某个实例对象 id 代表唯一标识
      *
      * @param appName
      *            - unique id of the application.
@@ -63,6 +67,7 @@ public interface LeaseManager<T> {
     /**
      * Renew the {@link Lease} associated w/ the passed in <code>appName</code>
      * and <code>id</code>.
+     * 针对某个服务实例 进行续约
      *
      * @param id
      *            - unique id within appName
@@ -74,6 +79,7 @@ public interface LeaseManager<T> {
 
     /**
      * Evict {@link T}s with expired {@link Lease}(s).
+     * 清除过期的服务实例
      */
     void evict();
 }
