@@ -78,19 +78,36 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     /**
      * 注册中心存放 服务实例的容器  第一级 key 是应用名 第二级应该是 以id 作为key 之类的
      * Lease 是对服务实例InstanceInfo 的包装  服务中心的数据就是维护在该map中
+     * 这里只存放本地的 服务实例
      */
     private final ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
             = new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
 
+    /**
+     * 每个注册中心 还维护了 其他region的 registry 对象
+     */
     protected Map<String, RemoteRegionRegistry> regionNameVSRemoteRegistry = new HashMap<String, RemoteRegionRegistry>();
+
+    /**
+     * 构建了一个 缓存对象 应该是每个 instance 与对应的 status
+     */
     protected final ConcurrentMap<String, InstanceStatus> overriddenInstanceStatusMap = CacheBuilder
             .newBuilder().initialCapacity(500)
             .expireAfterAccess(1, TimeUnit.HOURS)
             .<String, InstanceStatus>build().asMap();
 
     // CircularQueues here for debugging/statistics purposes only
+    /**
+     * 最近注册的 对象
+     */
     private final CircularQueue<Pair<Long, String>> recentRegisteredQueue;
+    /**
+     * 最近关闭的 对象
+     */
     private final CircularQueue<Pair<Long, String>> recentCanceledQueue;
+    /**
+     * 最近修改的 对象  只有在规定时间内 完成 续约的对象才会存在里面 存在一个对应的定时任务扫描该列表 存在超时对象就会删除
+     */
     private ConcurrentLinkedQueue<RecentlyChangedItem> recentlyChangedQueue = new ConcurrentLinkedQueue<RecentlyChangedItem>();
 
     private final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
@@ -100,12 +117,27 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
     private Timer deltaRetentionTimer = new Timer("Eureka-DeltaRetentionTimer", true);
     private Timer evictionTimer = new Timer("Eureka-EvictionTimer", true);
+    /**
+     * 该对象内部 存在一个 bucket 对象
+     */
     private final MeasuredRate renewsLastMin;
 
+    /**
+     * 驱逐任务
+     */
     private final AtomicReference<EvictionTask> evictionTaskRef = new AtomicReference<EvictionTask>();
 
+    /**
+     * 所有已知的远端 region
+     */
     protected String[] allKnownRemoteRegions = EMPTY_STR_ARRAY;
+    /**
+     * 更新的 最小 阈值
+     */
     protected volatile int numberOfRenewsPerMinThreshold;
+    /**
+     * 期望需要续约的client数量
+     */
     protected volatile int expectedNumberOfClientsSendingRenews;
 
     /**
@@ -143,7 +175,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         // 该对象 内部 包含2个变量 currentBucket lastBucket lastBucket 会定时更新
         this.renewsLastMin = new MeasuredRate(1000 * 60 * 1);
 
-        // 启动定时任务 该任务用于移除没有在指定时间内更新租约信息的服务对象
+        // 启动定时任务 该任务用于移除没有在指定时间内更新租约信息的服务对象 （从最近续约的 列表中移除）
         this.deltaRetentionTimer.schedule(getDeltaRetentionTask(),
                 serverConfig.getDeltaRetentionTimerIntervalInMs(),
                 serverConfig.getDeltaRetentionTimerIntervalInMs());
@@ -160,19 +192,27 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         }
     }
 
+    /**
+     * 寻找远程 地区的注册中心 并将信息转移到该对象
+     * @throws MalformedURLException
+     */
     protected void initRemoteRegionRegistry() throws MalformedURLException {
+        // key 为 region  value 为 registry的 url
         Map<String, String> remoteRegionUrlsWithName = serverConfig.getRemoteRegionUrlsWithName();
         if (!remoteRegionUrlsWithName.isEmpty()) {
             allKnownRemoteRegions = new String[remoteRegionUrlsWithName.size()];
             int remoteRegionArrayIndex = 0;
             for (Map.Entry<String, String> remoteRegionUrlWithName : remoteRegionUrlsWithName.entrySet()) {
+                // 将键值对信息抽取出来 生成 RemoteRegionRegistry 对象  该对象内部维护了 HttpClient 再借助 URL 就可以通过 http 请求远端注册中心想要的数据
                 RemoteRegionRegistry remoteRegionRegistry = new RemoteRegionRegistry(
                         serverConfig,
                         clientConfig,
                         serverCodecs,
                         remoteRegionUrlWithName.getKey(),
                         new URL(remoteRegionUrlWithName.getValue()));
+                // 填充到 维护远端注册中心的 容器中
                 regionNameVSRemoteRegistry.put(remoteRegionUrlWithName.getKey(), remoteRegionRegistry);
+                // 填充已知的远端 注册中心
                 allKnownRemoteRegions[remoteRegionArrayIndex++] = remoteRegionUrlWithName.getKey();
             }
         }
@@ -185,6 +225,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         return responseCache;
     }
 
+    /**
+     * 获取本地 服务实例(instance) 的数量
+     * @return
+     */
     public long getLocalRegistrySize() {
         long total = 0;
         for (Map<String, Lease<InstanceInfo>> entry : registry.values()) {
@@ -195,6 +239,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
     /**
      * Completely clear the registry.
+     * 清空注册中心的数据
      */
     @Override
     public void clearRegistry() {
@@ -216,40 +261,41 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      *
      * @see com.netflix.eureka.lease.LeaseManager#register(java.lang.Object, int, boolean)
      *
-     *      根据时间间隔进行注册
+     *      设置指定的 续约时间间隔 以及是否 需要复制来注册 该接口应该自带幂等性
      */
     @Override
     public void register(InstanceInfo registrant, int leaseDuration, boolean isReplication) {
         try {
-            //使用读锁上锁 这时 就无法进行修改操作
+            // 使用读锁上锁 这时 就无法进行修改操作
             read.lock();
-            //注册中心内部是 一个二级map
+            // 注册中心内部是 一个二级map
             Map<String, Lease<InstanceInfo>> gMap = registry.get(registrant.getAppName());
-            //处理计数器
+            // 增加注册计数
             REGISTER.increment(isReplication);
-            //如果对应的应用名没有找到 服务对象 就创建一个新的容器
+            // 如果对应的应用名没有找到 服务对象 就创建一个新的容器
             if (gMap == null) {
+                // 创建 应用名 与 对应的 服务实例键值对
                 final ConcurrentHashMap<String, Lease<InstanceInfo>> gNewMap = new ConcurrentHashMap<String, Lease<InstanceInfo>>();
-                //这里是有可能发生并发的 所以是 putIfAbsend 如果获取到了 对象就代表被别的线程先添加了 猜测内部使用了 volatile
+                // 这里是有可能发生并发的 所以是 putIfAbsend 如果获取到了 对象就代表被别的线程先添加了
                 gMap = registry.putIfAbsent(registrant.getAppName(), gNewMap);
                 if (gMap == null) {
                     gMap = gNewMap;
                 }
             }
-            //二级key 是 id 能够定义到唯一的 服务  id 是什么时候生成的???
+            //二级key 是 id 能够定义到唯一的 服务id
             Lease<InstanceInfo> existingLease = gMap.get(registrant.getId());
             // Retain the last dirty timestamp without overwriting it, if there is already a lease
-            // 如果该服务已经注册
+            // 如果该服务已经注册  这里是允许 多个请求同时访问的
             if (existingLease != null && (existingLease.getHolder() != null)) {
-                //获取 生成脏数据的时间戳
+                // 这个应该可以等同于 请求id 之类的 代表该数据的一个标识
                 Long existingLastDirtyTimestamp = existingLease.getHolder().getLastDirtyTimestamp();
-                //获取此次 注册信息的 脏时间戳
+                // 获取申请注册的 实例信息的最后数据修改时间
                 Long registrationLastDirtyTimestamp = registrant.getLastDirtyTimestamp();
                 logger.debug("Existing lease found (existing={}, provided={}", existingLastDirtyTimestamp, registrationLastDirtyTimestamp);
 
                 // this is a > instead of a >= because if the timestamps are equal, we still take the remote transmitted
                 // InstanceInfo instead of the server local copy.
-                // 代表该注册时延时的 应该是之前就发起请求了
+                // 代表出现延时情况
                 if (existingLastDirtyTimestamp > registrationLastDirtyTimestamp) {
                     logger.warn("There is an existing lease and the existing lease's dirty timestamp {} is greater" +
                             " than the one that is being registered {}", existingLastDirtyTimestamp, registrationLastDirtyTimestamp);
@@ -261,10 +307,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 // 代表添加一个新的 服务信息
                 // The lease does not exist and hence it is a new registration
                 synchronized (lock) {
-                    //当想要注册新的 client 时 增加 renew 计数 现在还不知道是为什么
+                    // 添加需要续约的 client 数量
                     if (this.expectedNumberOfClientsSendingRenews > 0) {
                         // Since the client wants to register it, increase the number of clients sending renews
                         this.expectedNumberOfClientsSendingRenews = this.expectedNumberOfClientsSendingRenews + 1;
+                        // 更新续约阈值
                         updateRenewsPerMinThreshold();
                     }
                 }
@@ -614,15 +661,21 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * Evicts everything in the instance registry that has expired, if expiry is enabled.
      *
      * @see com.netflix.eureka.lease.LeaseManager#evict()
+     * 默认情况下执行驱逐时间为0
      */
     @Override
     public void evict() {
-        evict(0l);
+        evict(0L);
     }
 
+    /**
+     * 进行驱逐
+     * @param additionalLeaseMs 额外时间
+     */
     public void evict(long additionalLeaseMs) {
         logger.debug("Running the evict task");
 
+        // 不允许租约过期的情况 直接返回
         if (!isLeaseExpirationEnabled()) {
             logger.debug("DS: lease expiration is currently disabled.");
             return;
@@ -726,7 +779,9 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      *
      * @see com.netflix.discovery.shared.LookupService#getApplications()
      */
+    @Override
     public Applications getApplications() {
+        // 根据配置判断是否 只获取本地的 应用
         boolean disableTransparentFallback = serverConfig.disableTransparentFallbackToOtherRegion();
         if (disableTransparentFallback) {
             return getApplicationsFromLocalRegionOnly();
@@ -1233,8 +1288,12 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         responseCache.invalidate(appName, vipAddress, secureVipAddress);
     }
 
+    /**
+     * 更新续约阈值
+     */
     protected void updateRenewsPerMinThreshold() {
         this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingRenews
+                // 代表一分钟期望续约的次数
                 * (60.0 / serverConfig.getExpectedClientRenewalIntervalSeconds())
                 * serverConfig.getRenewalPercentThreshold());
     }
@@ -1287,6 +1346,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         renewsLastMin.stop();
     }
 
+    /**
+     * 驱逐任务
+     * @return
+     */
     @com.netflix.servo.annotations.Monitor(name = "numOfElementsinInstanceCache", description = "Number of overrides in the instance Cache", type = DataSourceType.GAUGE)
     public long getNumberofElementsininstanceCache() {
         return overriddenInstanceStatusMap.size();
@@ -1294,13 +1357,18 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
     /* visible for testing */ class EvictionTask extends TimerTask {
 
-        private final AtomicLong lastExecutionNanosRef = new AtomicLong(0l);
+        /**
+         * 最后执行的时间
+         */
+        private final AtomicLong lastExecutionNanosRef = new AtomicLong(0L);
 
         @Override
         public void run() {
             try {
+                // 每个一段时间 返回补偿时间
                 long compensationTimeMs = getCompensationTimeMs();
                 logger.info("Running the evict task with compensationTime {}ms", compensationTimeMs);
+                // 进行驱逐
                 evict(compensationTimeMs);
             } catch (Throwable e) {
                 logger.error("Could not run the evict task", e);
@@ -1312,19 +1380,28 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
          * vs the configured amount of time for execution. This is useful for cases where changes in time (due to
          * clock skew or gc for example) causes the actual eviction task to execute later than the desired time
          * according to the configured cycle.
+         * 获取补偿时间 该 时间是由预定的完成任务时间 与实际完成任务时间之间的差值
          */
         long getCompensationTimeMs() {
+            // 获取当前时间
             long currNanos = getCurrentTimeNano();
+            // 更新当前使劲按并返回上次的时间
             long lastNanos = lastExecutionNanosRef.getAndSet(currNanos);
-            if (lastNanos == 0l) {
-                return 0l;
+            if (lastNanos == 0L) {
+                return 0L;
             }
 
+            // 获取实际执行的时间
             long elapsedMs = TimeUnit.NANOSECONDS.toMillis(currNanos - lastNanos);
             long compensationTime = elapsedMs - serverConfig.getEvictionIntervalTimerInMs();
-            return compensationTime <= 0l ? 0l : compensationTime;
+            // 提前完成 就不需要补偿 反之 返回差值
+            return compensationTime <= 0L ? 0L : compensationTime;
         }
 
+        /**
+         * 单独拎出来该方法是便于测试
+         * @return
+         */
         long getCurrentTimeNano() {  // for testing
             return System.nanoTime();
         }

@@ -130,6 +130,7 @@ public interface InstanceRegistry extends LeaseManager<InstanceInfo>, LookupServ
 
     /**
      * Checks whether lease expiration is enabled.
+     * 是否允许租约过期
      * @return true if enabled
      */
     boolean isLeaseExpirationEnabled();

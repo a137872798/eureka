@@ -32,6 +32,7 @@ import org.apache.http.params.HttpParams;
 import static com.netflix.discovery.util.DiscoveryBuildInfo.buildVersion;
 
 /**
+ * httpClient 的包装对象
  * @author Tomasz Bak
  */
 public class EurekaJerseyClientImpl implements EurekaJerseyClient {

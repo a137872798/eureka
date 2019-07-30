@@ -65,6 +65,8 @@ import com.thoughtworks.xstream.annotations.XStreamImplicit;
 @XStreamAlias("applications")
 @JsonRootName("applications")
 public class Applications {
+
+
     private static class VipIndexSupport {
         /**
          * 同步链表
@@ -360,6 +362,7 @@ public class Applications {
         shuffleAndFilterInstances(virtualHostNameAppMap, filterUpInstances);
         shuffleAndFilterInstances(secureVirtualHostNameAppMap, filterUpInstances);
 
+        // 把上面 分类出来的数据保存到对应容器中
         this.virtualHostNameAppMap.putAll(virtualHostNameAppMap);
         this.virtualHostNameAppMap.keySet().retainAll(virtualHostNameAppMap.keySet());
         this.secureVirtualHostNameAppMap.putAll(secureVirtualHostNameAppMap);
@@ -376,6 +379,7 @@ public class Applications {
      *            indicates whether it is a secure request or a non-secure
      *            request.
      * @return AtomicLong value representing the next round-robin index.
+     * 获取 host 对应的 index
      */
     public AtomicLong getNextIndex(String virtualHostname, boolean secure) {
         Map<String, VipIndexSupport> index = (secure) ? secureVirtualHostNameAppMap : virtualHostNameAppMap;
@@ -394,16 +398,21 @@ public class Applications {
         Random shuffleRandom = new Random();
         for (Map.Entry<String, VipIndexSupport> entries : srcMap.entrySet()) {
             VipIndexSupport vipIndexSupport = entries.getValue();
+            // 获取 所有的 Vip 实例信息
             AbstractQueue<InstanceInfo> vipInstances = vipIndexSupport.instances;
+            // 代表被拦截后的结果
             final List<InstanceInfo> filteredInstances;
             if (filterUpInstances) {
+                // 必须 status == UP 才能被保留
                 filteredInstances = vipInstances.stream().filter(ii -> ii.getStatus() == InstanceStatus.UP)
                         .collect(Collectors.toCollection(() -> new ArrayList<>(vipInstances.size())));
             } else {
                 filteredInstances = new ArrayList<InstanceInfo>(vipInstances);
             }
             Collections.shuffle(filteredInstances, shuffleRandom);
+            // 打乱后保存
             vipIndexSupport.vipList.set(filteredInstances);
+            // 重置轮询的 下标
             vipIndexSupport.roundRobinIndex.set(0);
         }
     }
@@ -429,7 +438,7 @@ public class Applications {
      * 
      * @param app
      *            - the applications for which the instances need to be added.
-     *            将 app设置到 map中
+     *            如果 app 是 vip就设置到对应的容器
      */
     private void addInstancesToVIPMaps(Application app, Map<String, VipIndexSupport> virtualHostNameAppMap,
             Map<String, VipIndexSupport> secureVirtualHostNameAppMap) {

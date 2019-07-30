@@ -4,6 +4,7 @@ import com.sun.jersey.client.apache4.ApacheHttpClient4;
 
 /**
  * @author David Liu
+ * httpClient 的包装对象???
  */
 public interface EurekaJerseyClient {
 

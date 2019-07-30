@@ -118,7 +118,7 @@ public class InstanceInfo {
     private volatile String instanceId;
 
     /**
-     * 应用名
+     * 代表该服务实例属于哪个应用
      */
     private volatile String appName;
     /**
@@ -1014,17 +1014,20 @@ public class InstanceInfo {
      * client versions (some with the change, some without).
      *
      * @return the unique id.
+     * 延迟 初始化
      */
     @JsonIgnore
     public String getId() {
         if (instanceId != null && !instanceId.isEmpty()) {
             return instanceId;
+        // 不存在服务实例id 的情况下 UniqueIdentifier 代表具备唯一性 这里会尝试返回 数据中心的 id
         } else if (dataCenterInfo instanceof UniqueIdentifier) {
             String uniqueId = ((UniqueIdentifier) dataCenterInfo).getId();
             if (uniqueId != null && !uniqueId.isEmpty()) {
                 return uniqueId;
             }
         }
+        // 返回主机名
         return hostName;
     }
 

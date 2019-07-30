@@ -72,7 +72,7 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim
- * 针对http 请求的响应缓存对象
+ * 针对http 请求的响应缓存对象  像是维护了一个服务列表
  */
 public class ResponseCacheImpl implements ResponseCache {
 
@@ -252,16 +252,19 @@ public class ResponseCacheImpl implements ResponseCache {
      * @param key the key for which the cached information needs to be obtained.
      * @return payload which contains information about the applications.
      */
+    @Override
     public String get(final Key key) {
         return get(key, shouldUseReadOnlyResponseCache);
     }
 
     @VisibleForTesting
     String get(final Key key, boolean useReadOnlyCache) {
+        // 从缓存中找到 对应的Value
         Value payload = getValue(key, useReadOnlyCache);
         if (payload == null || payload.getPayload().equals(EMPTY_PAYLOAD)) {
             return null;
         } else {
+            // 获取 未压缩的数据
             return payload.getPayload();
         }
     }
@@ -274,7 +277,9 @@ public class ResponseCacheImpl implements ResponseCache {
      *            be obtained.
      * @return compressed payload which contains information about the
      *         applications.
+     *         获取压缩数据
      */
+    @Override
     public byte[] getGZIP(Key key) {
         Value payload = getValue(key, shouldUseReadOnlyResponseCache);
         if (payload == null) {
@@ -287,12 +292,14 @@ public class ResponseCacheImpl implements ResponseCache {
      * Invalidate the cache of a particular application.
      *
      * @param appName the application name of the application.
+     *                这里没有针对某个region 进行移除 而是按照 app 的级别 或者按照 vip地址 和 securevip 地址
      */
     @Override
     public void invalidate(String appName, @Nullable String vipAddress, @Nullable String secureVipAddress) {
         for (Key.KeyType type : Key.KeyType.values()) {
             for (Version v : Version.values()) {
                 invalidate(
+                        // ALL_APPS 和 ALL_APPS_DELTA 是2种特殊的app 这里使得某些数据无效
                         new Key(Key.EntityType.Application, appName, type, v, EurekaAccept.full),
                         new Key(Key.EntityType.Application, appName, type, v, EurekaAccept.compact),
                         new Key(Key.EntityType.Application, ALL_APPS, type, v, EurekaAccept.full),
@@ -314,6 +321,7 @@ public class ResponseCacheImpl implements ResponseCache {
      * Invalidate the cache information given the list of keys.
      *
      * @param keys the list of keys for which the cache information needs to be invalidated.
+     *             使得某个 Key 对应的缓存失效
      */
     public void invalidate(Key... keys) {
         for (Key key : keys) {
@@ -321,11 +329,13 @@ public class ResponseCacheImpl implements ResponseCache {
                     key.getEntityType(), key.getName(), key.getVersion(), key.getType(), key.getEurekaAccept());
 
             readWriteCacheMap.invalidate(key);
+            // 当未指定region的某个缓存失效了 下面所有 相关的携带region的也都会失效
             Collection<Key> keysWithRegions = regionSpecificKeys.get(key);
             if (null != keysWithRegions && !keysWithRegions.isEmpty()) {
                 for (Key keysWithRegion : keysWithRegions) {
                     logger.debug("Invalidating the response cache key : {} {} {} {} {}",
                             key.getEntityType(), key.getName(), key.getVersion(), key.getType(), key.getEurekaAccept());
+                    // 关联的也要移除
                     readWriteCacheMap.invalidate(keysWithRegion);
                 }
             }
@@ -388,6 +398,7 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /**
      * Get the payload in both compressed and uncompressed form.
+     * 这里数据会有短暂的延时啊 readOnly 可能还没有与 readWrite 同步
      */
     @VisibleForTesting
     Value getValue(final Key key, boolean useReadOnlyCache) {
@@ -433,6 +444,7 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /**
      * Generate pay load with both JSON and XML formats for a given application.
+     * 按照 key 的类型 json/xml gzip/normal 生成对应的 编解码器对象
      */
     private String getPayLoad(Key key, Application app) {
         if (app == null) {
@@ -450,7 +462,7 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /*
      * Generate pay load for the given key.
-     * 生成 需要被缓存的对象
+     * 生成 需要被缓存的对象 Value 对象被创建后会自动生成 被压缩的数据
      */
     private Value generatePayload(Key key) {
         Stopwatch tracer = null;
@@ -475,6 +487,7 @@ public class ResponseCacheImpl implements ResponseCache {
                             // 未指定region情况下 根据 其他条件 判断获取那些 应用
                             payload = getPayLoad(key, registry.getApplications());
                         }
+                    // 特殊应用
                     } else if (ALL_APPS_DELTA.equals(key.getName())) {
                         if (isRemoteRegionRequested) {
                             tracer = serializeDeltaAppsWithRemoteRegionTimer.start();
@@ -489,6 +502,7 @@ public class ResponseCacheImpl implements ResponseCache {
                             payload = getPayLoad(key, registry.getApplicationDeltas());
                         }
                     } else {
+                        // 默认情况使用指定的 key registry中获取 application
                         tracer = serializeOneApptimer.start();
                         payload = getPayLoad(key, registry.getApplication(key.getName()));
                     }
@@ -496,6 +510,7 @@ public class ResponseCacheImpl implements ResponseCache {
                 case VIP:
                 case SVIP:
                     tracer = serializeViptimer.start();
+                    // 根据vip 信息筛选 出 applications 下所有 地址匹配的 app 和instance并返回
                     payload = getPayLoad(key, getApplicationsForVip(key, registry));
                     break;
                 default:
@@ -511,16 +526,27 @@ public class ResponseCacheImpl implements ResponseCache {
         }
     }
 
+    /**
+     * 获取 vip applications的信息
+     * @param key
+     * @param registry
+     * @return
+     */
     private static Applications getApplicationsForVip(Key key, AbstractInstanceRegistry registry) {
         logger.debug(
                 "Retrieving applications from registry for key : {} {} {} {}",
                 key.getEntityType(), key.getName(), key.getVersion(), key.getType());
+        // 初始化一个空的 app应用列表
         Applications toReturn = new Applications();
+        // 从传入的注册中心获取全部的 应用
         Applications applications = registry.getApplications();
+        // Applications 是一个抽象概念 内部的 application 列表是通过 registeredApplications来称呼的
         for (Application application : applications.getRegisteredApplications()) {
             Application appToAdd = null;
+            // 获取所有服务实例对象
             for (InstanceInfo instanceInfo : application.getInstances()) {
                 String vipAddress;
+                // 获取对应的 vip 地址
                 if (Key.EntityType.VIP.equals(key.getEntityType())) {
                     vipAddress = instanceInfo.getVIPAddress();
                 } else if (Key.EntityType.SVIP.equals(key.getEntityType())) {
@@ -531,11 +557,15 @@ public class ResponseCacheImpl implements ResponseCache {
                 }
 
                 if (null != vipAddress) {
+                    // 尝试进行分割
                     String[] vipAddresses = vipAddress.split(",");
                     Arrays.sort(vipAddresses);
+                    // 看来有些key 是以 vip 地址作为name 的 这里数量大于0 就代表 这个registry 中存在 vip地址为该key 的 application
                     if (Arrays.binarySearch(vipAddresses, key.getName()) >= 0) {
                         if (null == appToAdd) {
+                            // 只要application 下有一个 instance 存在 该vip 地址就设置进去
                             appToAdd = new Application(application.getName());
+                            // 将结果设置到 toreturn中
                             toReturn.addApplication(appToAdd);
                         }
                         appToAdd.addInstance(instanceInfo);
@@ -559,7 +589,7 @@ public class ResponseCacheImpl implements ResponseCache {
     public class Value {
 
         /**
-         * 负荷对象 ??? 应该就是 未压缩的数据
+         * 负荷对象
          */
         private final String payload;
         private byte[] gzipped;

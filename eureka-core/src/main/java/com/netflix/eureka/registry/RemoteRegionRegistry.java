@@ -69,14 +69,20 @@ import org.slf4j.LoggerFactory;
  * {@link com.netflix.discovery.DiscoveryClient}
  *
  * @author Karthik Ranganathan
- *
+ * 远端的注册中心 内部维护了 远端的url 和 httpClient 对象 通过 http请求获取远端信息
  */
 public class RemoteRegionRegistry implements LookupService<String> {
     private static final Logger logger = LoggerFactory.getLogger(RemoteRegionRegistry.class);
 
+    /**
+     * 用于通信的 client 对象
+     */
     private final ApacheHttpClient4 discoveryApacheClient;
     private final EurekaJerseyClient discoveryJerseyClient;
     private final com.netflix.servo.monitor.Timer fetchRegistryTimer;
+    /**
+     * 远端注册中心的地址
+     */
     private final URL remoteRegionURL;
 
     private final ScheduledExecutorService scheduler;
