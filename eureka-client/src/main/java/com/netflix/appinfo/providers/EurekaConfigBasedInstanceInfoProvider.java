@@ -24,16 +24,25 @@ import org.slf4j.LoggerFactory;
  * and ApplicationInfoManager, and need to provide the same InstanceInfo to both.
  *
  * @author elandau
- *
+ * 该对象基于 eurekaInstanceConfig 来生成 instance 对象
  */
 @Singleton
 public class EurekaConfigBasedInstanceInfoProvider implements Provider<InstanceInfo> {
     private static final Logger LOG = LoggerFactory.getLogger(EurekaConfigBasedInstanceInfoProvider.class);
 
+    /**
+     * 配置对象
+     */
     private final EurekaInstanceConfig config;
 
+    /**
+     * 返回的实例信息
+     */
     private InstanceInfo instanceInfo;
 
+    /**
+     * 地址解析器
+     */
     @Inject(optional = true)
     private VipAddressResolver vipAddressResolver = null;
 
@@ -51,6 +60,7 @@ public class EurekaConfigBasedInstanceInfoProvider implements Provider<InstanceI
                     .setDurationInSecs(config.getLeaseExpirationDurationInSeconds());
 
             if (vipAddressResolver == null) {
+                // 该对象会去 DynamicProperty 中查找对应的值
                 vipAddressResolver = new Archaius1VipAddressResolver();
             }
 
@@ -58,12 +68,16 @@ public class EurekaConfigBasedInstanceInfoProvider implements Provider<InstanceI
             InstanceInfo.Builder builder = InstanceInfo.Builder.newBuilder(vipAddressResolver);
 
             // set the appropriate id for the InstanceInfo, falling back to datacenter Id if applicable, else hostname
+            // 从配置文件中获取本client 的id 可能为null
             String instanceId = config.getInstanceId();
             if (instanceId == null || instanceId.isEmpty()) {
+                // 默认情况是  Myown
                 DataCenterInfo dataCenterInfo = config.getDataCenterInfo();
                 if (dataCenterInfo instanceof UniqueIdentifier) {
+                    // 从数据中心获取 id
                     instanceId = ((UniqueIdentifier) dataCenterInfo).getId();
                 } else {
+                    // 如果是 普通配置 就直接获取本机host 否则 好像是从一个配置中心获取
                     instanceId = config.getHostName(false);
                 }
             }

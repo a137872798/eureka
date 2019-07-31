@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
  * their instance with eureka server.
  *
  * @author Karthik Ranganathan
- *
+ * 基础配置对象 内部维护了一些默认值
  */
 public abstract class AbstractInstanceConfig implements EurekaInstanceConfig {
     private static final Logger logger = LoggerFactory.getLogger(AbstractInstanceConfig.class);
@@ -50,6 +50,10 @@ public abstract class AbstractInstanceConfig implements EurekaInstanceConfig {
     private static final int SECURE_PORT = 443;
     private static final boolean INSTANCE_ENABLED_ON_INIT = false;
     private static final Pair<String, String> hostInfo = getHostInfo();
+
+    /**
+     * 默认的数据中心是 myOwn
+     */
     private DataCenterInfo info = new DataCenterInfo() {
         @Override
         public Name getName() {

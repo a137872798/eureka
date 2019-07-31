@@ -10,6 +10,7 @@ import com.netflix.discovery.EurekaNamespace;
 /**
  * This provider is necessary because the namespace is optional.
  * @author elandau
+ * 该对象 可以生成 CloudInstanceConfig
  */
 public class CloudInstanceConfigProvider implements Provider<CloudInstanceConfig> {
     @Inject(optional = true)

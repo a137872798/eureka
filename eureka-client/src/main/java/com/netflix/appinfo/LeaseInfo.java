@@ -32,19 +32,25 @@ import com.thoughtworks.xstream.annotations.XStreamOmitField;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim
- *
+ * 服务实例的  租约信息对象
  */
 @JsonRootName("leaseInfo")
 public class LeaseInfo {
 
+    /**
+     * 续约时间间隔
+     */
     public static final int DEFAULT_LEASE_RENEWAL_INTERVAL = 30;
+    /**
+     * 代表90秒没有续约就会移除该服务
+     */
     public static final int DEFAULT_LEASE_DURATION = 90;
 
     // Client settings
     private int renewalIntervalInSecs = DEFAULT_LEASE_RENEWAL_INTERVAL;
     private int durationInSecs = DEFAULT_LEASE_DURATION;
 
-    // Server populated
+    // Server populated 由 eurekaServer 来填充 应该是在对应事件时设置 比如 注册时设置注册时间
     private long registrationTimestamp;
     private long lastRenewalTimestamp;
     private long evictionTimestamp;

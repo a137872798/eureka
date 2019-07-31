@@ -7,10 +7,16 @@ import org.slf4j.LoggerFactory;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * vip地址解析器
+ */
 public class Archaius1VipAddressResolver implements VipAddressResolver {
 
     private static final Logger logger = LoggerFactory.getLogger(Archaius1VipAddressResolver.class);
 
+    /**
+     * VIP 地址格式 为 ${*****}
+     */
     private static final Pattern VIP_ATTRIBUTES_PATTERN = Pattern.compile("\\$\\{(.*?)\\}");
 
     @Override
