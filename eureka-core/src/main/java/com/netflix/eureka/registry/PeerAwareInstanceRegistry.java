@@ -24,7 +24,7 @@ import com.netflix.eureka.resources.ASGResource;
 import java.util.List;
 
 /**
- * 增加了 一些 是否允许被对端感知的 接口
+ * 增加了 一些 是否允许被对端感知的 接口   Peer 在 eureka 中的概念等同于server 集群  当某个注册中心收到一个client的操作(比如心跳) 就会同步到其他同级的 server
  * @author Tomasz Bak
  */
 public interface PeerAwareInstanceRegistry extends InstanceRegistry {

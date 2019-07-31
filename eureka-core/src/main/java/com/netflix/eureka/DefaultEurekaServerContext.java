@@ -33,6 +33,7 @@ import javax.inject.Singleton;
  * local server such as the registry.
  *
  * @author David Liu
+ * 该对象同时 管理多个核心对象的生命周期
  */
 @Singleton
 public class DefaultEurekaServerContext implements EurekaServerContext {

@@ -1244,6 +1244,7 @@ public class InstanceInfo {
      *
      * @param status status for this instance.
      * @return the prev status if a different status from the current was set, null otherwise
+     * 更新状态 并返回之前的状态
      */
     public synchronized InstanceStatus setStatus(InstanceStatus status) {
         if (this.status != status) {

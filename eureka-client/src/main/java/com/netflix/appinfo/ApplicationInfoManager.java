@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  *
  *
  * @author Karthik Ranganathan, Greg Kim
- *
+ * 针对 instance 级别的 管理器 内部有针对该实例 状态变更的 监听器 以及更新该实例信息的 api
  */
 @Singleton
 public class ApplicationInfoManager {
@@ -57,10 +57,22 @@ public class ApplicationInfoManager {
 
     private static ApplicationInfoManager instance = new ApplicationInfoManager(null, null, null);
 
+    /**
+     * 维护 状态切换的监听器
+     */
     protected final Map<String, StatusChangeListener> listeners;
+    /**
+     * 状态映射对象
+     */
     private final InstanceStatusMapper instanceStatusMapper;
 
+    /**
+     * 实例信息
+     */
     private InstanceInfo instanceInfo;
+    /**
+     * 实例配置
+     */
     private EurekaInstanceConfig config;
 
     public static class OptionalArgs {
@@ -119,6 +131,10 @@ public class ApplicationInfoManager {
         return instance;
     }
 
+    /**
+     * 使用配置对象初始化组件
+     * @param config
+     */
     public void initComponent(EurekaInstanceConfig config) {
         try {
             this.config = config;
@@ -152,6 +168,7 @@ public class ApplicationInfoManager {
      * please use the mechanism described in {@link EurekaInstanceConfig#getMetadataMap()}
      *
      * @param appMetadata application specific meta data.
+     *                    将元数据设置到instanceInfo
      */
     public void registerAppMetadata(Map<String, String> appMetadata) {
         instanceInfo.registerRuntimeMetadata(appMetadata);
@@ -163,6 +180,7 @@ public class ApplicationInfoManager {
      * of a status change event.
      *
      * @param status Status of the instance
+     *               更改状态 并通知所有监听器
      */
     public synchronized void setInstanceStatus(InstanceStatus status) {
         InstanceStatus next = instanceStatusMapper.map(status);
@@ -196,10 +214,10 @@ public class ApplicationInfoManager {
      * server on next heartbeat.
      *
      * see {@link InstanceInfo#getHostName()} for explanation on why the hostname is used as the default address
-     *      更新当前主机信息
+     *      更新当前主机信息 相当于 fetch
      */
     public void refreshDataCenterInfoIfRequired() {
-        //获取 主机信息  这个值是设置进去的 难道会在哪里做改动吗 应该是对用户开放了一个入口去修改hostname 然后这里会检测到之后就触发心跳将最新信息注册到eruekaServer 上
+        // 获取应用实例的 地址 准备更新信息
         String existingAddress = instanceInfo.getHostName();
 
         String existingSpotInstanceAction = null;

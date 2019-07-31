@@ -46,18 +46,31 @@ import static com.netflix.appinfo.PropertyBasedInstanceConfigConstants.*;
  * </p>
  *
  * @author Karthik Ranganathan
- *
+ * 该对象通过加载一个 配置文件 更新内部的配置如果 没有设置对应的属性 就从父类继承默认属性 且内部存在一个命名空间作为属性名的前缀
  */
 public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig implements EurekaInstanceConfig {
 
+    /**
+     * 命名空间 代表一些配置属性的前缀名
+     */
     protected final String namespace;
+    /**
+     * 动态属性工厂
+     */
     protected final DynamicPropertyFactory configInstance;
     private String appGrpNameFromEnv;
 
+    /**
+     * 默认的命名空间是  eureka
+     */
     public PropertiesInstanceConfig() {
         this(CommonConstants.DEFAULT_CONFIG_NAMESPACE);
     }
 
+    /**
+     * 默认的数据中心 MyOwn
+     * @param namespace
+     */
     public PropertiesInstanceConfig(String namespace) {
         this(namespace, new DataCenterInfo() {
             @Override
@@ -70,13 +83,16 @@ public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig im
     public PropertiesInstanceConfig(String namespace, DataCenterInfo info) {
         super(info);
 
+        // eureka.
         this.namespace = namespace.endsWith(".")
                 ? namespace
                 : namespace + ".";
 
+        // 默认组是 unkown
         appGrpNameFromEnv = ConfigurationManager.getConfigInstance()
                 .getString(FALLBACK_APP_GROUP_KEY, Values.UNKNOWN_APPLICATION);
 
+        // 从eureka-client 文件中 加载配置并设置到 configInstance中
         this.configInstance = Archaius1Utils.initConfig(CommonConstants.CONFIG_FILE_NAME);
     }
 
@@ -84,6 +100,7 @@ public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig im
      * (non-Javadoc)
      *
      * @see com.netflix.appinfo.AbstractInstanceConfig#isInstanceEnabledOnit()
+     * 从配置文件中读取数据
      */
     @Override
     public boolean isInstanceEnabledOnit() {
@@ -207,18 +224,23 @@ public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig im
      * metadata keys are searched under the namespace
      * <code>eureka.appinfo.metadata</code>.
      * </p>
+     * 代表该配置携带的 元数据
      */
     @Override
     public Map<String, String> getMetadataMap() {
         String metadataNamespace = namespace + INSTANCE_METADATA_PREFIX + ".";
         Map<String, String> metadataMap = new LinkedHashMap<String, String>();
+        // 获取 内部的配置对象实例
         Configuration config = (Configuration) configInstance.getBackingConfigurationSource();
+        // 去掉 .
         String subsetPrefix = metadataNamespace.charAt(metadataNamespace.length() - 1) == '.'
                 ? metadataNamespace.substring(0, metadataNamespace.length() - 1)
                 : metadataNamespace;
+        // 获取所有 以  eureka.metadata 为前缀的属性
         for (Iterator<String> iter = config.subset(subsetPrefix).getKeys(); iter.hasNext(); ) {
             String key = iter.next();
             String value = config.getString(subsetPrefix + "." + key);
+            // 将属性抽取出来并返回
             metadataMap.put(key, value);
         }
         return metadataMap;

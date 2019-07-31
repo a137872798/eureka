@@ -37,13 +37,17 @@ import javax.inject.Singleton;
  * </p>
  *
  * @author Karthik Ranganathan
- *
+ * RefreshableInstanceConfig 对应 解析 地址
  */
 @Singleton
+// 由该对象(CloudInstanceConfigProvider) 构建出 CloudInstanceConfig
 @ProvidedBy(CloudInstanceConfigProvider.class)
 public class CloudInstanceConfig extends PropertiesInstanceConfig implements RefreshableInstanceConfig {
     private static final Logger logger = LoggerFactory.getLogger(CloudInstanceConfig.class);
 
+    /**
+     * 默认的  aws 地址解析顺序
+     */
     private static final String[] DEFAULT_AWS_ADDRESS_RESOLUTION_ORDER = new String[] {
             MetaDataKey.publicHostname.name(),
             MetaDataKey.localIpv4.name()

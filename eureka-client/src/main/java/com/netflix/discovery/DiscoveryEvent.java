@@ -10,6 +10,9 @@ package com.netflix.discovery;
 public abstract class DiscoveryEvent implements EurekaEvent {
     
     // System time when the event happened
+    /**
+     * 事件发生时的时间戳
+     */
     private final long timestamp;
     
     protected DiscoveryEvent() {
