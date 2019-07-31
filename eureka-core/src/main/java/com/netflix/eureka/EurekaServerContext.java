@@ -22,22 +22,51 @@ import com.netflix.eureka.registry.PeerAwareInstanceRegistry;
 import com.netflix.eureka.resources.ServerCodecs;
 
 /**
+ * eureka 注册中心的 上下文对象 应该是对应整个注册中心生命周期的
  * @author David Liu
  */
 public interface EurekaServerContext {
 
+    /**
+     * 注册中心初始化
+     * @throws Exception
+     */
     void initialize() throws Exception;
 
+    /**
+     * 关闭注册中心
+     * @throws Exception
+     */
     void shutdown() throws Exception;
 
+    /**
+     * 获取注册中心服务端配置
+     * @return
+     */
     EurekaServerConfig getServerConfig();
 
+    /**
+     * 获取同级的 eureka 节点对象
+     * @return
+     */
     PeerEurekaNodes getPeerEurekaNodes();
 
+    /**
+     * 获取服务的编解码器
+     * @return
+     */
     ServerCodecs getServerCodecs();
 
+    /**
+     * 获取注册中心
+     * @return
+     */
     PeerAwareInstanceRegistry getRegistry();
 
+    /**
+     * 应用信息管理器
+     * @return
+     */
     ApplicationInfoManager getApplicationInfoManager();
 
 }

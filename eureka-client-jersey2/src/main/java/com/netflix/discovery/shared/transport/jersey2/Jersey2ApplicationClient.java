@@ -10,6 +10,7 @@ import java.util.Map;
  * A version of Jersey2 {@link com.netflix.discovery.shared.transport.EurekaHttpClient} to be used by applications.
  *
  * @author David Liu
+ * 该对象维护一组额外的请求头
  */
 public class Jersey2ApplicationClient extends AbstractJersey2EurekaHttpClient {
 

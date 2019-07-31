@@ -99,14 +99,34 @@ public class EurekaHttpResponse<T> {
         return new EurekaHttpResponseBuilder<T>(statusCode);
     }
 
+    /**
+     * 为resp 对象设置 响应结果
+     * @param statusCode
+     * @param entity
+     * @param <T>
+     * @return
+     */
     public static <T> EurekaHttpResponseBuilder<T> anEurekaHttpResponse(int statusCode, T entity) {
         return new EurekaHttpResponseBuilder<T>(statusCode).entity(entity);
     }
 
+    /**
+     * 用于创建 EurekaHttpResponse 对象的 builder
+     * @param <T>
+     */
     public static class EurekaHttpResponseBuilder<T> {
 
+        /**
+         * 状态码
+         */
         private final int statusCode;
+        /**
+         * 对应的 响应结果对象
+         */
         private T entity;
+        /**
+         * 响应头
+         */
         private Map<String, String> headers;
 
         private EurekaHttpResponseBuilder(int statusCode) {

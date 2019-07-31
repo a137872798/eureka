@@ -9,9 +9,13 @@ import com.netflix.discovery.provider.Serializer;
 
 /**
  * The jersey resource class that generates the replication batch response.
+ * 针对复制任务的返回值
  */
 @Serializer("jackson") // For backwards compatibility with DiscoveryJerseyProvider
 public class ReplicationListResponse {
+    /**
+     * 复制任务中 针对某个实例的返回值对象 看来复制任务会访问多个节点 并返回结果
+     */
     private List<ReplicationInstanceResponse> responseList;
 
     public ReplicationListResponse() {
@@ -27,6 +31,10 @@ public class ReplicationListResponse {
         return responseList;
     }
 
+    /**
+     * 添加响应对象
+     * @param singleResponse
+     */
     public void addResponse(ReplicationInstanceResponse singleResponse) {
         responseList.add(singleResponse);
     }

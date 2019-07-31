@@ -31,13 +31,20 @@ import org.slf4j.LoggerFactory;
 /**
  * Abstract class for the common functionality of a VIP/SVIP resource.
  *
+ * 作为 Vip 相关的 接口的 基类
  * @author Nitesh Kant (nkant@netflix.com)
  */
 abstract class AbstractVIPResource {
 
     private static final Logger logger = LoggerFactory.getLogger(AbstractVIPResource.class);
 
+    /**
+     * 内部维护了 注册中心
+     */
     private final PeerAwareInstanceRegistry registry;
+    /**
+     * 内部维护了缓存对象
+     */
     private final ResponseCache responseCache;
 
     AbstractVIPResource(EurekaServerContext server) {

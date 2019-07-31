@@ -4,6 +4,7 @@ import com.netflix.appinfo.AbstractEurekaIdentity;
 
 /**
  * This class holds metadata information related to eureka server auth with peer eureka servers
+ * 服务实例对象
  */
 public class EurekaServerIdentity extends AbstractEurekaIdentity {
     public static final String DEFAULT_SERVER_NAME = "DefaultServer";

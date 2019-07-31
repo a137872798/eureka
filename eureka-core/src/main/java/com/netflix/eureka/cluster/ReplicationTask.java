@@ -6,13 +6,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * 所有 复制任务的 基类
  * Base class for all replication tasks.
  */
 abstract class ReplicationTask {
 
     private static final Logger logger = LoggerFactory.getLogger(ReplicationTask.class);
 
+    /**
+     * 代表需要对 哪个node 进行复制
+     */
     protected final String peerNodeName;
+    /**
+     * 复制的动作
+     */
     protected final Action action;
 
     ReplicationTask(String peerNodeName, Action action) {

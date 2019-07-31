@@ -6,12 +6,24 @@ import com.netflix.appinfo.InstanceInfo;
 
 /**
  * The jersey resource class that generates the replication indivdiual response.
+ * 复制任务返回的 结果
  */
 public class ReplicationInstanceResponse {
 
+    /**
+     * 结果状态码
+     */
     private final int statusCode;
+    /**
+     * 响应实体
+     */
     private final InstanceInfo responseEntity;
 
+    /**
+     * 该对象通过json 字符串初始化
+     * @param statusCode
+     * @param responseEntity
+     */
     @JsonCreator
     public ReplicationInstanceResponse(
             @JsonProperty("statusCode") int statusCode,

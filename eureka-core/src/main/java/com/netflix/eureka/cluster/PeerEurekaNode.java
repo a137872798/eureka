@@ -43,27 +43,31 @@ import org.slf4j.LoggerFactory;
  * <p>
  *
  * @author Karthik Ranganathan, Greg Kim
- *
+ *  应该是 代表 会将 针对某个节点的操作 同时作用到多个节点上
  */
 public class PeerEurekaNode {
 
     /**
      * A time to wait before continuing work if there is network level error.
+     * 网络方面异常 重试时间 为 100毫秒
      */
     private static final long RETRY_SLEEP_TIME_MS = 100;
 
     /**
      * A time to wait before continuing work if there is congestion on the server side.
+     * 服务端出错 选择 等待1秒
      */
     private static final long SERVER_UNAVAILABLE_SLEEP_TIME_MS = 1000;
 
     /**
      * Maximum amount of time in ms to wait for new items prior to dispatching a batch of tasks.
+     * 分派一批新的任务前 最多允许等待500毫秒
      */
     private static final long MAX_BATCHING_DELAY_MS = 500;
 
     /**
      * Maximum batch size for batched requests.
+     * 最多允许一次发送250 个请求
      */
     private static final int BATCH_SIZE = 250;
 
@@ -73,11 +77,29 @@ public class PeerEurekaNode {
 
     public static final String HEADER_REPLICATION = "x-netflix-discovery-replication";
 
+    /**
+     * 该节点 对应的url
+     */
     private final String serviceUrl;
+    /**
+     * 服务器配置对象
+     */
     private final EurekaServerConfig config;
+    /**
+     * 最大处理延迟???
+     */
     private final long maxProcessingDelayMs;
+    /**
+     * 注册中心
+     */
     private final PeerAwareInstanceRegistry registry;
+    /**
+     * 目标主机
+     */
     private final String targetHost;
+    /**
+     * 用于 复制的 client  可能 peer 代表这些节点需要同时被更新
+     */
     private final HttpReplicationClient replicationClient;
 
     private final TaskDispatcher<String, ReplicationTask> batchingDispatcher;
@@ -158,6 +180,7 @@ public class PeerEurekaNode {
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
         batchingDispatcher.process(
                 taskId("cancel", appName, id),
+                // 复制cancel任务
                 new InstanceReplicationTask(targetHost, Action.Cancel, appName, id) {
                     @Override
                     public EurekaHttpResponse<Void> execute() {

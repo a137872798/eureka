@@ -1331,14 +1331,24 @@ public class DiscoveryClient implements EurekaClient {
                     clientConfig.getInstanceInfoReplicationIntervalSeconds(),
                     2); // burstSize
 
+            //  监听器对象 默认实现
             statusChangeListener = new ApplicationInfoManager.StatusChangeListener() {
+                /**
+                 * 该监听器 的名字
+                 * @return
+                 */
                 @Override
                 public String getId() {
                     return "statusChangeListener";
                 }
 
+                /**
+                 * 当监听到对应事件后发起通知
+                 * @param statusChangeEvent
+                 */
                 @Override
                 public void notify(StatusChangeEvent statusChangeEvent) {
+                    // 如果 修改前时  down 或者修改成了down 发起警告
                     if (InstanceStatus.DOWN == statusChangeEvent.getStatus() ||
                             InstanceStatus.DOWN == statusChangeEvent.getPreviousStatus()) {
                         // log at warn level if DOWN was involved

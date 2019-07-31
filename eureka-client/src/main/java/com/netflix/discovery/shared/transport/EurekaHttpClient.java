@@ -9,7 +9,7 @@ import com.netflix.discovery.shared.Applications;
  * Low level Eureka HTTP client API.
  *
  * @author Tomasz Bak
- *       低级别的 通过 http 进行交互的 client 对象  为什么不使用自定义协议 http协议并不能双向通信
+ *       通过 http 进行交互的 client 对象  为什么不使用自定义协议 http协议并不能双向通信
  */
 public interface EurekaHttpClient {
 
