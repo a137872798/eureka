@@ -32,7 +32,7 @@ public abstract class InstanceReplicationTask extends ReplicationTask {
     private final InstanceStatus overriddenStatus;
 
     /**
-     * 是否 复制服务实例
+     * 是否要将该实例信息复制到其他节点
      */
     private final boolean replicateInstanceInfo;
 

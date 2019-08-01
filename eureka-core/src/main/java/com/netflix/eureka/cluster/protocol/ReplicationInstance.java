@@ -6,15 +6,38 @@ import com.netflix.appinfo.InstanceInfo;
 import com.netflix.eureka.registry.PeerAwareInstanceRegistryImpl.Action;
 
 /**
+ * 重复对象实例
  * The jersey resource class that generates a particular replication event
  */
 public class ReplicationInstance {
+    /**
+     * 应用名
+     */
     private String appName;
+    /**
+     * 唯一标识
+     */
     private String id;
+    /**
+     * 最后修改时间
+     */
     private Long lastDirtyTimestamp;
+    /**
+     * 覆盖的状态
+     */
     private String overriddenStatus;
+    /**
+     * 当前状态
+     */
     private String status;
+    /**
+     * 实例信息
+     */
     private InstanceInfo instanceInfo;
+
+    /**
+     * 本次执行动作
+     */
     private Action action;
 
     @JsonCreator

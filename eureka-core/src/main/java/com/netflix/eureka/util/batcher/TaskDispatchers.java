@@ -4,6 +4,7 @@ package com.netflix.eureka.util.batcher;
  * See {@link TaskDispatcher} for an overview.
  *
  * @author Tomasz Bak
+ * 任务分发静态类
  */
 public class TaskDispatchers {
 
@@ -14,10 +15,13 @@ public class TaskDispatchers {
                                                                                 long congestionRetryDelayMs,
                                                                                 long networkFailureRetryMs,
                                                                                 TaskProcessor<T> taskProcessor) {
+        // 创建 任务收集器
         final AcceptorExecutor<ID, T> acceptorExecutor = new AcceptorExecutor<>(
                 id, maxBufferSize, 1, maxBatchingDelay, congestionRetryDelayMs, networkFailureRetryMs
         );
+        // 创建任务处理器  该对象在初始化时就开始执行后台线程任务了
         final TaskExecutors<ID, T> taskExecutor = TaskExecutors.singleItemExecutors(id, workerCount, taskProcessor, acceptorExecutor);
+
         return new TaskDispatcher<ID, T>() {
             @Override
             public void process(ID id, T task, long expiryTime) {

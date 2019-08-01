@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  *
  * @author Karthik Ranganathan, Greg Kim
- *  应该是 代表 会将 针对某个节点的操作 同时作用到多个节点上
+ *  应该是 代表 会将 针对某个节点的操作 同时作用到多个节点上  服务端 特有
  */
 public class PeerEurekaNode {
 
@@ -61,7 +61,7 @@ public class PeerEurekaNode {
 
     /**
      * Maximum amount of time in ms to wait for new items prior to dispatching a batch of tasks.
-     * 分派一批新的任务前 最多允许等待500毫秒
+     * 执行批量任务 要等待 0.5秒
      */
     private static final long MAX_BATCHING_DELAY_MS = 500;
 
@@ -73,8 +73,14 @@ public class PeerEurekaNode {
 
     private static final Logger logger = LoggerFactory.getLogger(PeerEurekaNode.class);
 
+    /**
+     * 代表使用 复制操作时访问的 url
+     */
     public static final String BATCH_URL_PATH = "peerreplication/batch/";
 
+    /**
+     * 代表本次请求 是 复制操作的 请求头
+     */
     public static final String HEADER_REPLICATION = "x-netflix-discovery-replication";
 
     /**
@@ -82,11 +88,11 @@ public class PeerEurekaNode {
      */
     private final String serviceUrl;
     /**
-     * 服务器配置对象
+     * 服务器配置对象  就代表该节点 描述的是一个 注册中心对象
      */
     private final EurekaServerConfig config;
     /**
-     * 最大处理延迟???
+     * 最大处理延迟???   就是针对添加到 任务池中的任务 这个应该是默认的任务过期时间 超时后 该任务不会被执行
      */
     private final long maxProcessingDelayMs;
     /**
@@ -103,11 +109,11 @@ public class PeerEurekaNode {
     private final HttpReplicationClient replicationClient;
 
     /**
-     * 针对单个 node 的请求 会累积 并批量执行  也就是对应到client有一个可以处理 List<Req> 的api 并返回批量结果
+     * 批量任务处理器
      */
     private final TaskDispatcher<String, ReplicationTask> batchingDispatcher;
     /**
-     * 非批量人物只会针对 AWS 相关
+     * 单任务处理器
      */
     private final TaskDispatcher<String, ReplicationTask> nonBatchingDispatcher;
 
@@ -129,6 +135,7 @@ public class PeerEurekaNode {
 
         String batcherName = getBatcherName();
         ReplicationTaskProcessor taskProcessor = new ReplicationTaskProcessor(targetHost, replicationClient);
+        // 创建一个 批量处理任务的对象
         this.batchingDispatcher = TaskDispatchers.createBatchingTaskDispatcher(
                 batcherName,
                 config.getMaxElementsInPeerReplicationPool(),
@@ -139,6 +146,7 @@ public class PeerEurekaNode {
                 retrySleepTimeMs,
                 taskProcessor
         );
+        // 创建 执行普通任务的对象
         this.nonBatchingDispatcher = TaskDispatchers.createNonBatchingTaskDispatcher(
                 targetHost,
                 config.getMaxElementsInStatusReplicationPool(),
@@ -158,16 +166,22 @@ public class PeerEurekaNode {
      *            the instance information {@link InstanceInfo} of any instance
      *            that is send to this instance.
      * @throws Exception
+     * 接受到注册任务时 要同步到所有同级节点
      */
     public void register(final InstanceInfo info) throws Exception {
+        // 获取续约时间 毫秒数
         long expiryTime = System.currentTimeMillis() + getLeaseRenewalOf(info);
         batchingDispatcher.process(
+                // 生成任务id  该对象具备相同任务id 会 覆盖掉旧任务的特性
                 taskId("register", info),
+                // replicateInstanceInfo 代表是否要将该 实例信息复制到其他节点
                 new InstanceReplicationTask(targetHost, Action.Register, info, null, true) {
+                    // 该任务的 核心方法 就是委托给 执行复制任务的client 调用对用的 api
                     public EurekaHttpResponse<Void> execute() {
                         return replicationClient.register(info);
                     }
                 },
+                // 超过了 最大续约时间 就是代表超时
                 expiryTime
         );
     }
@@ -181,6 +195,7 @@ public class PeerEurekaNode {
      * @param id
      *            the unique identifier of the instance.
      * @throws Exception
+     * 将关闭任务发到同级节点上
      */
     public void cancel(final String appName, final String id) throws Exception {
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
@@ -188,11 +203,21 @@ public class PeerEurekaNode {
                 taskId("cancel", appName, id),
                 // 复制cancel任务
                 new InstanceReplicationTask(targetHost, Action.Cancel, appName, id) {
+                    /**
+                     * 委托执行关闭任务
+                     * @return
+                     */
                     @Override
                     public EurekaHttpResponse<Void> execute() {
                         return replicationClient.cancel(appName, id);
                     }
 
+                    /**
+                     * 失败时 打印日志
+                     * @param statusCode
+                     * @param responseEntity
+                     * @throws Throwable
+                     */
                     @Override
                     public void handleFailure(int statusCode, Object responseEntity) throws Throwable {
                         super.handleFailure(statusCode, responseEntity);
@@ -219,15 +244,19 @@ public class PeerEurekaNode {
      * @param overriddenStatus
      *            the overridden status information if any of the instance.
      * @throws Throwable
+     * 发送心跳任务
      */
     public void heartbeat(final String appName, final String id,
                           final InstanceInfo info, final InstanceStatus overriddenStatus,
                           boolean primeConnection) throws Throwable {
+        // 如果是 主要连接 ???
         if (primeConnection) {
             // We do not care about the result for priming request.
+            // 发送心跳后 不需要在意返回值  而且这里是直接执行 其他请求都是 放到线程池中执行的
             replicationClient.sendHeartBeat(appName, id, info, overriddenStatus);
             return;
         }
+        // 需要使用线程池发送
         ReplicationTask replicationTask = new InstanceReplicationTask(targetHost, Action.Heartbeat, info, overriddenStatus, false) {
             @Override
             public EurekaHttpResponse<InstanceInfo> execute() throws Throwable {
@@ -242,11 +271,15 @@ public class PeerEurekaNode {
                     if (info != null) {
                         logger.warn("{}: cannot find instance id {} and hence replicating the instance with status {}",
                                 getTaskName(), info.getId(), info.getStatus());
+                        // 将该节点注册到同级节点上
                         register(info);
                     }
+                    // 非404 异常时 判断是否需要 同步时间戳
                 } else if (config.shouldSyncWhenTimestampDiffers()) {
+                    // 心跳检测会返回对端实例信息吗
                     InstanceInfo peerInstanceInfo = (InstanceInfo) responseEntity;
                     if (peerInstanceInfo != null) {
+                        // 将节点信息注册到注册中心 以及更新状态
                         syncInstancesIfTimestampDiffers(appName, id, info, peerInstanceInfo);
                     }
                 }
@@ -268,6 +301,7 @@ public class PeerEurekaNode {
      *            the asg name if any of this instance.
      * @param newStatus
      *            the new status of the ASG.
+     *            ASG 的不看
      */
     public void statusUpdate(final String asgName, final ASGStatus newStatus) {
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
@@ -294,6 +328,7 @@ public class PeerEurekaNode {
      *            the new status of the instance.
      * @param info
      *            the instance information of the instance.
+     *            同步节点间 更新状态的请求
      */
     public void statusUpdate(final String appName, final String id,
                              final InstanceStatus newStatus, final InstanceInfo info) {
@@ -319,6 +354,7 @@ public class PeerEurekaNode {
      *            the unique identifier of the instance.
      * @param info
      *            the instance information of the instance.
+     *            删除 覆盖status  （这东西是做什么的???）
      */
     public void deleteStatusOverride(final String appName, final String id, final InstanceInfo info) {
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
@@ -383,6 +419,7 @@ public class PeerEurekaNode {
     /**
      * Synchronize {@link InstanceInfo} information if the timestamp between
      * this node and the peer eureka nodes vary.
+     * 同步2个节点间的时间戳
      */
     private void syncInstancesIfTimestampDiffers(String appName, String id, InstanceInfo info, InstanceInfo infoFromPeer) {
         try {
@@ -390,10 +427,12 @@ public class PeerEurekaNode {
                 logger.warn("Peer wants us to take the instance information from it, since the timestamp differs,"
                         + "Id : {} My Timestamp : {}, Peer's timestamp: {}", id, info.getLastDirtyTimestamp(), infoFromPeer.getLastDirtyTimestamp());
 
+                // 代表对端节点修改过状态
                 if (infoFromPeer.getOverriddenStatus() != null && !InstanceStatus.UNKNOWN.equals(infoFromPeer.getOverriddenStatus())) {
                     logger.warn("Overridden Status info -id {}, mine {}, peer's {}", id, info.getOverriddenStatus(), infoFromPeer.getOverriddenStatus());
                     registry.storeOverriddenStatusIfRequired(appName, id, infoFromPeer.getOverriddenStatus());
                 }
+                // 将节点注册到 注册中心
                 registry.register(infoFromPeer, true);
             }
         } catch (Throwable e) {

@@ -19,14 +19,21 @@ import org.slf4j.LoggerFactory;
 import static com.netflix.eureka.cluster.protocol.ReplicationInstance.ReplicationInstanceBuilder.aReplicationInstance;
 
 /**
+ * 重复任务处理对象
  * @author Tomasz Bak
  */
 class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
 
     private static final Logger logger = LoggerFactory.getLogger(ReplicationTaskProcessor.class);
 
+    /**
+     * 发送重复任务请求的 client 对象
+     */
     private final HttpReplicationClient replicationClient;
 
+    /**
+     * 同级节点的 id
+     */
     private final String peerId;
 
     private volatile long lastNetworkErrorTime;
@@ -38,21 +45,30 @@ class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
         this.peerId = peerId;
     }
 
+    /**
+     * 处理单任务
+     * @param task
+     * @return
+     */
     @Override
     public ProcessingResult process(ReplicationTask task) {
         try {
+            // 该人物对象本身就 封装了发送请求的逻辑
             EurekaHttpResponse<?> httpResponse = task.execute();
             int statusCode = httpResponse.getStatusCode();
             Object entity = httpResponse.getEntity();
             if (logger.isDebugEnabled()) {
                 logger.debug("Replication task {} completed with status {}, (includes entity {})", task.getTaskName(), statusCode, entity != null);
             }
+            // 成功情况下 处理对应逻辑
             if (isSuccess(statusCode)) {
                 task.handleSuccess();
             } else if (statusCode == 503) {
                 logger.debug("Server busy (503) reply for task {}", task.getTaskName());
+                // 繁忙 之后会生成一个延迟
                 return ProcessingResult.Congestion;
             } else {
+                // 任务失败也会生成延迟
                 task.handleFailure(statusCode, entity);
                 return ProcessingResult.PermanentError;
             }
@@ -73,10 +89,16 @@ class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
         return ProcessingResult.Success;
     }
 
+    /**
+     * 处理批量任务
+     * @param tasks
+     * @return
+     */
     @Override
     public ProcessingResult process(List<ReplicationTask> tasks) {
         ReplicationList list = createReplicationListOf(tasks);
         try {
+            // 提交批量任务 返回批量结果
             EurekaHttpResponse<ReplicationListResponse> response = replicationClient.submitBatchUpdates(list);
             int statusCode = response.getStatusCode();
             if (!isSuccess(statusCode)) {
@@ -89,6 +111,7 @@ class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
                     return ProcessingResult.PermanentError;
                 }
             } else {
+                // 处理批量结果
                 handleBatchResponse(tasks, response.getEntity().getResponseList());
             }
         } catch (Throwable e) {
@@ -138,6 +161,11 @@ class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
         }
     }
 
+    /**
+     * 根据code 确定 执行success 还是 failure
+     * @param task
+     * @param response
+     */
     private void handleBatchResponse(ReplicationTask task, ReplicationInstanceResponse response) {
         int statusCode = response.getStatusCode();
         if (isSuccess(statusCode)) {
@@ -152,6 +180,11 @@ class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
         }
     }
 
+    /**
+     * 将 多个重复任务 整合起来
+     * @param tasks
+     * @return
+     */
     private ReplicationList createReplicationListOf(List<ReplicationTask> tasks) {
         ReplicationList list = new ReplicationList();
         for (ReplicationTask task : tasks) {
@@ -203,8 +236,12 @@ class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
         } while (e != null);
         return false;
     }
-    
-    
+
+    /**
+     * 将task 对象中基本信息抽取出来生成 instance对象
+     * @param task
+     * @return
+     */
     private static ReplicationInstance createReplicationInstanceOf(InstanceReplicationTask task) {
         ReplicationInstanceBuilder instanceBuilder = aReplicationInstance();
         instanceBuilder.withAppName(task.getAppName());

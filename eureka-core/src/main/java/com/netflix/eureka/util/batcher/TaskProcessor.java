@@ -6,6 +6,7 @@ import java.util.List;
  * An interface to be implemented by clients for task execution.
  *
  * @author Tomasz Bak
+ * 任务处理器接口
  */
 public interface TaskProcessor<T> {
 
