@@ -28,10 +28,16 @@ public class EndpointUtils {
         CNAME, A
     }
 
+    /**
+     * 用于生成随机函数的接口
+     */
     public static interface ServiceUrlRandomizer {
         void randomize(List<String> urlList);
     }
 
+    /**
+     * 基于实例url 生成随机数
+     */
     public static class InstanceInfoBasedUrlRandomizer implements ServiceUrlRandomizer {
         private final InstanceInfo instanceInfo;
 
@@ -70,12 +76,15 @@ public class EndpointUtils {
      * @param randomizer a randomizer to randomized returned urls, if loading from dns
      *
      * @return The list of all eureka service urls for the eureka client to talk to.
+     * 通过客户端配置信息 选择的zone和随机数生成器获取 注册中心的 url 列表
      */
     public static List<String> getDiscoveryServiceUrls(EurekaClientConfig clientConfig, String zone, ServiceUrlRandomizer randomizer) {
         boolean shouldUseDns = clientConfig.shouldUseDnsForFetchingServiceUrls();
         if (shouldUseDns) {
+            // dns 的不看
             return getServiceUrlsFromDNS(clientConfig, zone, clientConfig.shouldPreferSameZoneEureka(), randomizer);
         }
+        // 从配置文件中获取 注册中心url   shouldPreferSameZoneEureka() 是否倾向于选择相同zone 的eureka 服务器
         return getServiceUrlsFromConfig(clientConfig, zone, clientConfig.shouldPreferSameZoneEureka());
     }
 
@@ -186,22 +195,29 @@ public class EndpointUtils {
      * @param instanceZone The zone in which the client resides
      * @param preferSameZone true if we have to prefer the same zone as the client, false otherwise
      * @return The list of all eureka service urls for the eureka client to talk to
+     * 从配置文件中获取 所有 注册中心的url  perferSameZone 代表是否期望选择同一zone 的数据
      */
     public static List<String> getServiceUrlsFromConfig(EurekaClientConfig clientConfig, String instanceZone, boolean preferSameZone) {
         List<String> orderedUrls = new ArrayList<String>();
+        // 从配置对象中 获取region  不设置的情况下 使用 default 作为 region  一般实际中也是不配置该属性  只要配置defaultZone 就可以
         String region = getRegion(clientConfig);
+        // 返回region 的 zone  找不到就返回 defaultZone
         String[] availZones = clientConfig.getAvailabilityZones(clientConfig.getRegion());
+        // 没有设置 defaultZone  就将 zone 设置成 default
         if (availZones == null || availZones.length == 0) {
             availZones = new String[1];
             availZones[0] = DEFAULT_ZONE;
         }
         logger.debug("The availability zone for the given region {} are {}", region, availZones);
+
+        // instanceZone 就是从对应 config上获取 zone 的信息 照理说这个和 上面的  availzones 应该是一样的 (不对 这个zone 是从返回的列表中默认选中第一个)
         int myZoneOffset = getZoneOffset(instanceZone, preferSameZone, availZones);
 
         List<String> serviceUrls = clientConfig.getEurekaServerServiceUrls(availZones[myZoneOffset]);
         if (serviceUrls != null) {
             orderedUrls.addAll(serviceUrls);
         }
+        // 如果下标是2 长度为4 就不会加入所有的 url 了 这个有什么意义吗???
         int currentOffset = myZoneOffset == (availZones.length - 1) ? 0 : (myZoneOffset + 1);
         while (currentOffset != myZoneOffset) {
             serviceUrls = clientConfig.getEurekaServerServiceUrls(availZones[currentOffset]);
@@ -247,16 +263,15 @@ public class EndpointUtils {
         //获取 zone 的 下标
         int myZoneOffset = getZoneOffset(instanceZone, preferSameZone, availZones);
 
-        //获取到 合适的 zone
+        //获取到 合适的 zone 默认情况下返回第一个
         String zone = availZones[myZoneOffset];
         //找到 该 zone 的 全部 注册中心(eurekaServer)
         List<String> serviceUrls = clientConfig.getEurekaServerServiceUrls(zone);
         if (serviceUrls != null) {
-            //按照顺序 加入到 链表结构中
+            //按照顺序 加入到 map 中
             orderedUrls.put(zone, serviceUrls);
         }
-        //如果 元素 与下标刚好对应 那么 本次偏移量就是0  否则偏移量加1  前半句可能是一个简化的条件 就是针对 数组长度为1 的
-        //可以理解为大部分情况 都会加入所有zone的 注册中心url
+        // 如果长度为1 加入该zone 全部url 否则返回2个 zone 间所有url (第二个zone 代表最后一个 区域)
         int currentOffset = myZoneOffset == (availZones.length - 1) ? 0 : (myZoneOffset + 1);
         while (currentOffset != myZoneOffset) {
             //如果下标 不对应 那么 会将 每个zone 中 注册中心url 全部加入
@@ -373,6 +388,7 @@ public class EndpointUtils {
     public static String getRegion(EurekaClientConfig clientConfig) {
         String region = clientConfig.getRegion();
         if (region == null) {
+            // 默认情况返回 default 作为 region
             region = DEFAULT_REGION;
         }
         region = region.trim().toLowerCase();
@@ -388,13 +404,13 @@ public class EndpointUtils {
      * Gets the zone to pick up for this instance.
      * 通过指定算法 挑选合适的 注册中心(eurekaServer)实例对象
      *
-     * @param myZone 应该是 该eurekaClient 所在的 zone 吧  如果注册zho-ngxin
+     * @param myZone client 所在的zone列表中的第一个zone
      * @param preferSameZone 是否倾向于使用同一zone
      * @param availZones 所有可用的zone
      */
     private static int getZoneOffset(String myZone, boolean preferSameZone, String[] availZones) {
         for (int i = 0; i < availZones.length; i++) {
-            //很简洁的写法需要全部满足 时 会返回 myZone 的下标否则就是返回0
+            // 不要求返回相同zone 时 直接返回 否则找到 对应的下标
             if (myZone != null && (availZones[i].equalsIgnoreCase(myZone.trim()) == preferSameZone)) {
                 return i;
             }

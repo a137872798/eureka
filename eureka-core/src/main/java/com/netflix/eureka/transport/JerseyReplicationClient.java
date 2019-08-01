@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import static com.netflix.discovery.shared.transport.EurekaHttpResponse.anEurekaHttpResponse;
 
 /**
+ * 拓展了 基本的 eurekaClient 对象(具备发送http请求的能力)
  * @author Tomasz Bak
  */
 public class JerseyReplicationClient extends AbstractJerseyEurekaHttpClient implements HttpReplicationClient {
@@ -48,6 +49,10 @@ public class JerseyReplicationClient extends AbstractJerseyEurekaHttpClient impl
         this.jerseyApacheClient = jerseyClient.getClient();
     }
 
+    /**
+     * 添加特殊的请求头  代表本client 发送的消息都是针对 replication的
+     * @param webResource
+     */
     @Override
     protected void addExtraHeaders(Builder webResource) {
         webResource.header(PeerEurekaNode.HEADER_REPLICATION, "true");

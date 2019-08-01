@@ -80,7 +80,13 @@ public class PeerEurekaNode {
     private final String targetHost;
     private final HttpReplicationClient replicationClient;
 
+    /**
+     * 针对单个 node 的请求 会累积 并批量执行  也就是对应到client有一个可以处理 List<Req> 的api 并返回批量结果
+     */
     private final TaskDispatcher<String, ReplicationTask> batchingDispatcher;
+    /**
+     * 非批量人物只会针对 AWS 相关
+     */
     private final TaskDispatcher<String, ReplicationTask> nonBatchingDispatcher;
 
     public PeerEurekaNode(PeerAwareInstanceRegistry registry, String targetHost, String serviceUrl, HttpReplicationClient replicationClient, EurekaServerConfig config) {

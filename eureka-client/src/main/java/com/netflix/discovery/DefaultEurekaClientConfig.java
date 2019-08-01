@@ -385,12 +385,14 @@ public class DefaultEurekaClientConfig implements EurekaClientConfig {
     public List<String> getEurekaServerServiceUrls(String myZone) {
         String serviceUrls = configInstance.getStringProperty(
                 namespace + CONFIG_EUREKA_SERVER_SERVICE_URL_PREFIX + "." + myZone, null).get();
+        // 默认情况 没有找到url 尝试寻找 .default
         if (serviceUrls == null || serviceUrls.isEmpty()) {
             serviceUrls = configInstance.getStringProperty(
                     namespace + CONFIG_EUREKA_SERVER_SERVICE_URL_PREFIX + ".default", null).get();
 
         }
         if (serviceUrls != null) {
+            // ，号拆分地址
             return Arrays.asList(serviceUrls.split(URL_SEPARATOR));
         }
 

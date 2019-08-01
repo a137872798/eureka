@@ -42,6 +42,9 @@ public class PeerEurekaNodes {
     protected final ServerCodecs serverCodecs;
     private final ApplicationInfoManager applicationInfoManager;
 
+    /**
+     * 不包含 自身  针对 本机既是server又是client的情况
+     */
     private volatile List<PeerEurekaNode> peerEurekaNodes = Collections.emptyList();
     private volatile Set<String> peerEurekaNodeUrls = Collections.emptySet();
 
@@ -85,11 +88,15 @@ public class PeerEurekaNodes {
                 }
         );
         try {
+            // 通过维护的所有对端节点url 更新节点信息  对端节点url 应该是从 config中获取的
+            // 并生成对应的节点列表
             updatePeerEurekaNodes(resolvePeerUrls());
             Runnable peersUpdateTask = new Runnable() {
                 @Override
                 public void run() {
                     try {
+                        // 定期更新节点信息  应该是针对url 不是从配置文件中获取 而是从dataCenter (应该是类似配置中心的概念)
+                        // 或者是 支持热部署 修改配置文件能同步这里的peerNode???
                         updatePeerEurekaNodes(resolvePeerUrls());
                     } catch (Throwable e) {
                         logger.error("Cannot update the replica Nodes", e);
@@ -97,6 +104,7 @@ public class PeerEurekaNodes {
 
                 }
             };
+            // 开启定时任务
             taskExecutor.scheduleWithFixedDelay(
                     peersUpdateTask,
                     serverConfig.getPeerEurekaNodesUpdateIntervalMs(),
@@ -127,21 +135,28 @@ public class PeerEurekaNodes {
      * Resolve peer URLs.
      *
      * @return peer URLs with node's own URL filtered out
+     * 解析其他节点的 url
      */
     protected List<String> resolvePeerUrls() {
+        // 这个应该是本服务代表的 实例信息 InstanceInfo
         InstanceInfo myInfo = applicationInfoManager.getInfo();
+        // 根据 region 返回下面所有的 zone  如果找不到 会默认使用 defaultZone 去查找属性值  看来针对region zone 有实际含义的就代表是 AWS
+        // 这里默认会返回多个zone 中的第一个
         String zone = InstanceInfo.getZone(clientConfig.getAvailabilityZones(clientConfig.getRegion()), myInfo);
+        // 获取注册中心的路径 如果只有一个 zone 就返回该zone 的全部 url 否则 返回2个 zone 间所有url  第二个zone 代表多个可用zone 的最后一个
         List<String> replicaUrls = EndpointUtils
                 .getDiscoveryServiceUrls(clientConfig, zone, new EndpointUtils.InstanceInfoBasedUrlRandomizer(myInfo));
 
         int idx = 0;
         while (idx < replicaUrls.size()) {
             if (isThisMyUrl(replicaUrls.get(idx))) {
+                // 如果注册中心是自身 就移除掉
                 replicaUrls.remove(idx);
             } else {
                 idx++;
             }
         }
+        // 仅返回 其他注册中心的url  注册中心url 为自身的都要移除掉
         return replicaUrls;
     }
 
@@ -150,6 +165,7 @@ public class PeerEurekaNodes {
      * create new ones.
      *
      * @param newPeerUrls peer node URLs; this collection should have local node's URL filtered out
+     *                    传入 其他注册中心的 url 并尝试更新节点
      */
     protected void updatePeerEurekaNodes(List<String> newPeerUrls) {
         if (newPeerUrls.isEmpty()) {
@@ -157,16 +173,20 @@ public class PeerEurekaNodes {
             return;
         }
 
+        // 代表 本次url中不存在 的其他url 应该被移除
         Set<String> toShutdown = new HashSet<>(peerEurekaNodeUrls);
         toShutdown.removeAll(newPeerUrls);
+        // 代表本次url中 应该增加的部分  第一次调用该方法就是将全部url 设置到 toAdd中
         Set<String> toAdd = new HashSet<>(newPeerUrls);
         toAdd.removeAll(peerEurekaNodeUrls);
 
+        // 代表注册中心节点没有发生变化 直接返回
         if (toShutdown.isEmpty() && toAdd.isEmpty()) { // No change
             return;
         }
 
         // Remove peers no long available
+        // 代表新的节点列表 根据 toRemove 和 toAdd 进行调整
         List<PeerEurekaNode> newNodeList = new ArrayList<>(peerEurekaNodes);
 
         if (!toShutdown.isEmpty()) {
@@ -176,6 +196,7 @@ public class PeerEurekaNodes {
                 PeerEurekaNode eurekaNode = newNodeList.get(i);
                 if (toShutdown.contains(eurekaNode.getServiceUrl())) {
                     newNodeList.remove(i);
+                    // 终止该节点 也就是 关闭 任务池线程
                     eurekaNode.shutDown();
                 } else {
                     i++;
@@ -187,20 +208,30 @@ public class PeerEurekaNodes {
         if (!toAdd.isEmpty()) {
             logger.info("Adding new peer nodes {}", toAdd);
             for (String peerUrl : toAdd) {
+                // createPeerEurekaNode 根据url 创建一个新的节点
                 newNodeList.add(createPeerEurekaNode(peerUrl));
             }
         }
 
         this.peerEurekaNodes = newNodeList;
+        // 更新当前peer节点的 url
         this.peerEurekaNodeUrls = new HashSet<>(newPeerUrls);
     }
 
+    /**
+     * 通过 peerNode url 拉取节点信息
+     * @param peerEurekaNodeUrl
+     * @return
+     */
     protected PeerEurekaNode createPeerEurekaNode(String peerEurekaNodeUrl) {
+        // 创建一个 RelicationClient 对象 这里创建的是 JerseyReplicationClient 对象
         HttpReplicationClient replicationClient = JerseyReplicationClient.createReplicationClient(serverConfig, serverCodecs, peerEurekaNodeUrl);
+        // 截取 host 信息
         String targetHost = hostFromUrl(peerEurekaNodeUrl);
         if (targetHost == null) {
             targetHost = "host";
         }
+        // 创建对端节点对象 针对该对象发起的请求 会进入到 任务池中 并且 会发送给所有peerNode
         return new PeerEurekaNode(registry, targetHost, peerEurekaNodeUrl, replicationClient, serverConfig);
     }
 
@@ -233,10 +264,12 @@ public class PeerEurekaNodes {
      *         replicate, false otherwise.
      */
     public boolean isThisMyUrl(String url) {
+        // 返回服务端的 url  应该是说 本机既是服务端又是客户端吧
         final String myUrlConfigured = serverConfig.getMyUrl();
         if (myUrlConfigured != null) {
             return myUrlConfigured.equals(url);
         }
+        // 判断是否是 实例自身的url
         return isInstanceURL(url, applicationInfoManager.getInfo());
     }
     
@@ -246,10 +279,13 @@ public class PeerEurekaNodes {
      * @param url the service url of the replica node that the check is made.
      * @param instance the instance to check the service url against
      * @return true, if the url represents the supplied instance, false otherwise.
+     * 判断传入的url 是否跟 instance 的url 一致
      */
     public boolean isInstanceURL(String url, InstanceInfo instance) {
+        // 截取 host
         String hostName = hostFromUrl(url);
         String myInfoComparator = instance.getHostName();
+        // 如果是使用ip 注册
         if (clientConfig.getTransportConfig().applicationsResolverUseIp()) {
             myInfoComparator = instance.getIPAddr();
         }

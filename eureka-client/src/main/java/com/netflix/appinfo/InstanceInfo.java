@@ -1456,13 +1456,16 @@ public class InstanceInfo {
      * @param myInfo
      *            - The InstanceInfo object of the instance.
      * @return - The zone in which the particular instance belongs to.
+     * 一般 这里的 zone 代表从配置文件中获取的  但是instance 不一定都符合这些zone 要进行一些过滤
      */
     public static String getZone(String[] availZones, InstanceInfo myInfo) {
+        // 默认选择第一个zone
         String instanceZone = ((availZones == null || availZones.length == 0) ? "default"
                 : availZones[0]);
         if (myInfo != null
                 && myInfo.getDataCenterInfo().getName() == DataCenterInfo.Name.Amazon) {
 
+            // 如果数据中心是 AWS 就从aws 中获取zone
             String awsInstanceZone = ((AmazonInfo) myInfo.getDataCenterInfo())
                     .get(AmazonInfo.MetaDataKey.availabilityZone);
             if (awsInstanceZone != null) {

@@ -36,6 +36,8 @@ import com.netflix.eureka.resources.ServerCodecs;
 
 /**
  * @author Tomasz Bak
+ * 该对象的逻辑 基本等同于 父类 只是header 添加了一个标明是 replication请求的属性  也就是该client 并没有直接针对多node 发送请求的能力
+ * 还是借助于 EurekaNodes 对多注册中心同时发出请求 还有增加处理批量请求的能力
  */
 public class Jersey2ReplicationClient extends AbstractJersey2EurekaHttpClient implements HttpReplicationClient {
 
@@ -107,6 +109,9 @@ public class Jersey2ReplicationClient extends AbstractJersey2EurekaHttpClient im
         }
     }
 
+    /**
+     * 处理批量任务 一般就是 register cancel 等等
+     */
     @Override
     public EurekaHttpResponse<ReplicationListResponse> submitBatchUpdates(ReplicationList replicationList) {
         Response response = null;
