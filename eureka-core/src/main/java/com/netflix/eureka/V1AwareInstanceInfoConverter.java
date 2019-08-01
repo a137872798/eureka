@@ -25,14 +25,19 @@ import com.netflix.eureka.resources.CurrentRequestVersion;
  * Support for {@link Version#V1}. {@link Version#V2} introduces a new status
  * {@link InstanceStatus#OUT_OF_SERVICE}.
  *
- * @author Karthik Ranganathan, Greg Kim
+ * @author Karthik Ranganathan, Greg Kim。
  *
  */
 public class V1AwareInstanceInfoConverter extends InstanceInfoConverter {
 
+    /**
+     * 解析节点时 status 从 info 中获取
+     */
     @Override
     public String getStatus(InstanceInfo info) {
+        // 获取当前请求的版本
         Version version = CurrentRequestVersion.get();
+        // 默认情况下 还没有设置  或者是 V1
         if (version == null || version == Version.V1) {
             InstanceStatus status = info.getStatus();
             switch (status) {
@@ -45,6 +50,7 @@ public class V1AwareInstanceInfoConverter extends InstanceInfoConverter {
                     status = InstanceStatus.DOWN;
                     break;
             }
+            // 如果没有 status 默认返回 DOWN
             return status.name();
         } else {
             return super.getStatus(info);

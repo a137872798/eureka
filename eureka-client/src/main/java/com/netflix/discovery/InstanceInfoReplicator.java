@@ -34,7 +34,7 @@ class InstanceInfoReplicator implements Runnable {
      */
     private final DiscoveryClient discoveryClient;
     /**
-     * 自身实例信息
+     * 本机实例信息
      */
     private final InstanceInfo instanceInfo;
 
@@ -57,11 +57,26 @@ class InstanceInfoReplicator implements Runnable {
      */
     private final AtomicBoolean started;
 
-    //令牌桶算法的相关参数
+    /**
+     * 令牌桶算法的相关参数
+     */
     private final RateLimiter rateLimiter;
+    /**
+     * 令牌桶大小
+     */
     private final int burstSize;
+    /**
+     * 代表每分钟会消耗 多少令牌???
+     */
     private final int allowedRatePerMinute;
 
+    /**
+     * 创建 具备将自身信息 不断更新到注册中心的对象
+     * @param discoveryClient
+     * @param instanceInfo 本机作为 client的实例信息
+     * @param replicationIntervalSeconds 将自身信息 发送到多注册中心的时间间隔
+     * @param burstSize 令牌桶大小
+     */
     InstanceInfoReplicator(DiscoveryClient discoveryClient, InstanceInfo instanceInfo, int replicationIntervalSeconds, int burstSize) {
         this.discoveryClient = discoveryClient;
         this.instanceInfo = instanceInfo;
@@ -76,7 +91,7 @@ class InstanceInfoReplicator implements Runnable {
 
         this.started = new AtomicBoolean(false);
 
-        //这4个属性先不看
+        // 代表每分钟生成一个令牌
         this.rateLimiter = new RateLimiter(TimeUnit.MINUTES);
         this.replicationIntervalSeconds = replicationIntervalSeconds;
         this.burstSize = burstSize;
@@ -91,7 +106,7 @@ class InstanceInfoReplicator implements Runnable {
     public void start(int initialDelayMs) {
         //注意 这里利用原子变量 来启动 这样可以避免并发启动出现的bug
         if (started.compareAndSet(false, true)) {
-            //设置成 "脏"
+            // 把自身设置为dirty 就会触发下面的 register 逻辑 因为 只有是dirty的情况 才会进行重新注册(对应 instance信息发生变更的情况)
             instanceInfo.setIsDirty();  // for initial register
             //开始启动定时任务
             Future next = scheduler.schedule(this, initialDelayMs, TimeUnit.SECONDS);
@@ -101,10 +116,15 @@ class InstanceInfoReplicator implements Runnable {
     }
 
     public void stop() {
+        // 关闭 并等待任务终止
         shutdownAndAwaitTermination(scheduler);
         started.set(false);
     }
 
+    /**
+     * 关闭任务 并等待线程完成自身的清理任务
+     * @param pool
+     */
     private void shutdownAndAwaitTermination(ExecutorService pool) {
         pool.shutdown();
         try {
@@ -116,20 +136,28 @@ class InstanceInfoReplicator implements Runnable {
         }
     }
 
+    /**
+     * 暂停本次任务并在之后重新执行
+     * @return
+     */
     public boolean onDemandUpdate() {
+        // 尝试获取令牌 如果没有获取到的情况下就不进行更新
         if (rateLimiter.acquire(burstSize, allowedRatePerMinute)) {
             if (!scheduler.isShutdown()) {
+                // 传入一个普通任务
                 scheduler.submit(new Runnable() {
                     @Override
                     public void run() {
                         logger.debug("Executing on-demand update of local InstanceInfo");
     
                         Future latestPeriodic = scheduledPeriodicRef.get();
+                        // 关闭本次任务
                         if (latestPeriodic != null && !latestPeriodic.isDone()) {
                             logger.debug("Canceling the latest scheduled update, it will be rescheduled at the end of on demand update");
                             latestPeriodic.cancel(false);
                         }
-    
+
+                        // 重新执行定时任务
                         InstanceInfoReplicator.this.run();
                     }
                 });
@@ -140,6 +168,7 @@ class InstanceInfoReplicator implements Runnable {
             }
         } else {
             logger.warn("Ignoring onDemand update due to rate limiter");
+            // 代表没有获得令牌 忽略本次更新
             return false;
         }
     }

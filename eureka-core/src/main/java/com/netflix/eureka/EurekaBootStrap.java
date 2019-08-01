@@ -62,7 +62,8 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim, David Liu
- *
+ * 该对象 就是eurekaServer 启动引导程序 通过监听 servlet的生命周期
+ * eurekaServer 是搭载在tomcat 上的 那么 eurekaclient 呢??? 他们是否使用同一套启动逻辑???
  */
 public class EurekaBootStrap implements ServletContextListener {
     private static final Logger logger = LoggerFactory.getLogger(EurekaBootStrap.class);
@@ -80,9 +81,18 @@ public class EurekaBootStrap implements ServletContextListener {
 
     private static final String EUREKA_DATACENTER = "eureka.datacenter";
 
+    /**
+     * eurekaServer 的生命周期对象
+     */
     protected volatile EurekaServerContext serverContext;
+    /**
+     * AWS 相关先不看
+     */
     protected volatile AwsBinder awsBinder;
-    
+
+    /**
+     * server 具备client 的职能是因为 在云环境下 他也是 配置中心的 client 也可能它会访问其他server 这样他就是一个 client
+     */
     private EurekaClient eurekaClient;
 
     /**
@@ -110,7 +120,9 @@ public class EurekaBootStrap implements ServletContextListener {
     @Override
     public void contextInitialized(ServletContextEvent event) {
         try {
+            // 当受到 servlet 启动的事件时
             initEurekaEnvironment();
+            // 初始化 eurekaServerContext 对象
             initEurekaServerContext();
 
             ServletContext sc = event.getServletContext();
@@ -123,17 +135,21 @@ public class EurekaBootStrap implements ServletContextListener {
 
     /**
      * Users can override to initialize the environment themselves.
+     * 初始化 eureka 环境
      */
     protected void initEurekaEnvironment() throws Exception {
         logger.info("Setting the eureka configuration..");
 
+        // 获取 dataCenter 信息
         String dataCenter = ConfigurationManager.getConfigInstance().getString(EUREKA_DATACENTER);
         if (dataCenter == null) {
+            // 设置成 default 也就是默认值
             logger.info("Eureka data center value eureka.datacenter is not set, defaulting to default");
             ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_DATACENTER, DEFAULT);
         } else {
             ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_DATACENTER, dataCenter);
         }
+        // 没有设置环境的情况下 默认使用 test
         String environment = ConfigurationManager.getConfigInstance().getString(EUREKA_ENVIRONMENT);
         if (environment == null) {
             ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_ENVIRONMENT, TEST);
@@ -143,29 +159,39 @@ public class EurekaBootStrap implements ServletContextListener {
 
     /**
      * init hook for server context. Override for custom logic.
+     * 创建 属于 eureka 的 Context 对象
      */
     protected void initEurekaServerContext() throws Exception {
+        // 创建默认的 server Config 对象 通过读取 eureka-server 文件
         EurekaServerConfig eurekaServerConfig = new DefaultEurekaServerConfig();
 
         // For backward compatibility
+        // 应该是给 xml / json 添加转换器  就是 如果info 对象没有status 默认返回DOWN
         JsonXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
         XmlXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
 
         logger.info("Initializing the eureka client...");
         logger.info(eurekaServerConfig.getJsonCodecName());
+        // 创建默认的编解码器 具体如何实现先不看
         ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
 
         ApplicationInfoManager applicationInfoManager = null;
 
+        // 一开始应该是还没创建的
         if (eurekaClient == null) {
+            // 从配置中心获取配置 或者生成本地对象 该对象只能获取到 最上层的默认属性而不是从 配置文件中读取
             EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
                     ? new CloudInstanceConfig()
                     : new MyDataCenterInstanceConfig();
-            
+
+            // 后面的provider 对象可以通过 config 构建 instanceInfo 对象
             applicationInfoManager = new ApplicationInfoManager(
                     instanceConfig, new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
-            
+
+            // 生成默认的 clientConfig  对象 应该会从 eureka-client文件中读取数据(前提是存在该文件) 具体解析配置的逻辑先不看 如果没有该配置文件
+            // 会吞掉异常并打印日志 提示找不到 配置文件
             EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
+            // 使用InstanceInfo 和  配置对象生成  client
             eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig);
         } else {
             applicationInfoManager = eurekaClient.getApplicationInfoManager();

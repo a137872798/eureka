@@ -51,10 +51,15 @@ public class EurekaConfigBasedInstanceInfoProvider implements Provider<InstanceI
         this.config = config;
     }
 
+    /**
+     * 通过client 配置对象 生成 instanceInfo 对象
+     * @return
+     */
     @Override
     public synchronized InstanceInfo get() {
         if (instanceInfo == null) {
             // Build the lease information to be passed to the server based on config
+            // 从配置文件中获取 租约相关信息 生成租约对象
             LeaseInfo.Builder leaseInfoBuilder = LeaseInfo.Builder.newBuilder()
                     .setRenewalIntervalInSecs(config.getLeaseRenewalIntervalInSeconds())
                     .setDurationInSecs(config.getLeaseExpirationDurationInSeconds());
@@ -83,10 +88,12 @@ public class EurekaConfigBasedInstanceInfoProvider implements Provider<InstanceI
             }
 
             String defaultAddress;
+            // 如果是 本地配置 也就是 MyDataCenter 就是 false
             if (config instanceof RefreshableInstanceConfig) {
                 // Refresh AWS data center info, and return up to date address
                 defaultAddress = ((RefreshableInstanceConfig) config).resolveDefaultAddress(false);
             } else {
+                // host 作为 默认地址
                 defaultAddress = config.getHostName(false);
             }
 

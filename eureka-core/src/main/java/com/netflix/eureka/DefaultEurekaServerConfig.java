@@ -101,16 +101,21 @@ public class DefaultEurekaServerConfig implements EurekaServerConfig {
         init();
     }
 
+    /**
+     * 配置对象被创建时 进行初始化
+     */
     private void init() {
         String env = ConfigurationManager.getConfigInstance().getString(
                 EUREKA_ENVIRONMENT, TEST);
         ConfigurationManager.getConfigInstance().setProperty(
                 ARCHAIUS_DEPLOYMENT_ENVIRONMENT, env);
 
+        // 获取eureka 环境文件名 默认叫 eureka-server
         String eurekaPropsFile = EUREKA_PROPS_FILE.get();
         try {
             // ConfigurationManager
             // .loadPropertiesFromResources(eurekaPropsFile);
+            // 加载文件
             ConfigurationManager
                     .loadCascadedPropertiesFromResources(eurekaPropsFile);
         } catch (IOException e) {

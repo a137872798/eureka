@@ -1350,8 +1350,7 @@ public class InstanceInfo {
      * @param unsetDirtyTimestamp the expected lastDirtyTimestamp to unset.
      */
     public synchronized void unsetIsDirty(long unsetDirtyTimestamp) {
-        //如果最后一次 dirty 时间小于传入时间 代表lastDirtyTimestamp 已经失效 那么就需要修改 isDirty 为false
-        //这里涉及到2个操作  compare and set 所以 不能单纯依靠原子Boolean 来实现 所以使用了 内置锁
+        // 如果最后dirty 时间 超过了传入的时间就代表在这个时间段 又有别的 变化使得数据又变脏了 这样就不能误改状态
         if (lastDirtyTimestamp <= unsetDirtyTimestamp) {
             isInstanceInfoDirty = false;
         } else {

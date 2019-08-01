@@ -25,16 +25,30 @@ public class DefaultServerCodecs implements ServerCodecs {
     protected final CodecWrapper fullXmlCodec;
     protected final CodecWrapper compactXmlCodec;
 
+    /**
+     * 根据 serverConfig 的配置 确定编解码器
+     * @param serverConfig
+     * @return
+     */
     private static CodecWrapper getFullJson(EurekaServerConfig serverConfig) {
         CodecWrapper codec = CodecWrappers.getCodec(serverConfig.getJsonCodecName());
         return codec == null ? CodecWrappers.getCodec(CodecWrappers.LegacyJacksonJson.class) : codec;
     }
 
+    /**
+     * 同上
+     * @param serverConfig
+     * @return
+     */
     private static CodecWrapper getFullXml(EurekaServerConfig serverConfig) {
         CodecWrapper codec = CodecWrappers.getCodec(serverConfig.getXmlCodecName());
         return codec == null ? CodecWrappers.getCodec(CodecWrappers.XStreamXml.class) : codec;
     }
 
+    /**
+     * 根据 serverConfig 来初始化 编解码器
+     * @param serverConfig
+     */
     @Inject
     public DefaultServerCodecs(EurekaServerConfig serverConfig) {
         this (

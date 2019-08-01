@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  *
  *
  * @author Karthik Ranganathan, Greg Kim
- *
+ * 该对象用于 操作内部的 InstanceInfo （该对象代表一个client  实例 通过抽取 eureka-client 文件生成属性）
  */
 @Singleton
 public class ApplicationInfoManager {

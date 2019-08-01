@@ -139,40 +139,89 @@ public class DiscoveryClient implements EurekaClient {
      * A scheduler to be used for the following 3 tasks:
      * - updating service urls
      * - scheduling a TimedSuperVisorTask
+     *
+     * 定时任务线程池
      */
     private final ScheduledExecutorService scheduler;
     // additional executors for supervised subtasks
+
+    /**
+     * 执行心跳的线程池
+     */
     private final ThreadPoolExecutor heartbeatExecutor;
+    /**
+     * 刷新缓存的线程池
+     */
     private final ThreadPoolExecutor cacheRefreshExecutor;
 
     private final Provider<HealthCheckHandler> healthCheckHandlerProvider;
     private final Provider<HealthCheckCallback> healthCheckCallbackProvider;
+
+    /**
+     * 注册的前置钩子
+     */
     private final PreRegistrationHandler preRegistrationHandler;
     /**
-     * 本地服务应用缓存
+     * 本地服务应用  比如本机作为一个提供者 那么肯定会有自己的应用
      */
     private final AtomicReference<Applications> localRegionApps = new AtomicReference<Applications>();
     private final Lock fetchRegistryUpdateLock = new ReentrantLock();
     // monotonically increasing generation counter to ensure stale threads do not reset registry to an older version
     private final AtomicLong fetchRegistryGeneration;
+    /**
+     * 实例信息 管理对象 代表本机自身
+     */
     private final ApplicationInfoManager applicationInfoManager;
+    /**
+     * ApplicationInfoManager 内部的 instanceInfo
+     */
     private final InstanceInfo instanceInfo;
+    /**
+     * 远端 region 看来是 多个 region 拼接起来的
+     */
     private final AtomicReference<String> remoteRegionsToFetch;
     private final AtomicReference<String[]> remoteRegionsRef;
     private final InstanceRegionChecker instanceRegionChecker;
 
+    /**
+     * 该对象可以生成随机数
+     */
     private final EndpointUtils.ServiceUrlRandomizer urlRandomizer;
+    /**
+     * 支援的注册中心???  该对象实现类 返回都是 null
+     */
     private final Provider<BackupRegistry> backupRegistryProvider;
+    /**
+     * eureka 的 传输任务都交给该对象
+     */
     private final EurekaTransport eurekaTransport;
 
+    /**
+     * 该对象 现在没有作用
+     */
     private final AtomicReference<HealthCheckHandler> healthCheckHandlerRef = new AtomicReference<>();
+    /**
+     * 远端 地址 以及 对应的 应用列表
+     */
     private volatile Map<String, Applications> remoteRegionVsApps = new ConcurrentHashMap<>();
+    /**
+     * 默认状态为 unknown
+     */
     private volatile InstanceInfo.InstanceStatus lastRemoteInstanceStatus = InstanceInfo.InstanceStatus.UNKNOWN;
+    /**
+     * 写时拷贝
+     */
     private final CopyOnWriteArraySet<EurekaEventListener> eventListeners = new CopyOnWriteArraySet<>();
 
     private String appPathIdentifier;
+    /**
+     * 针对状态变更的监听器
+     */
     private ApplicationInfoManager.StatusChangeListener statusChangeListener;
 
+    /**
+     * 将自身信息 发送到远端注册中心
+     */
     private InstanceInfoReplicator instanceInfoReplicator;
 
     private volatile int registrySize = 0;
@@ -1434,13 +1483,16 @@ public class DiscoveryClient implements EurekaClient {
      * 刷新本地实例 如果发现有效的改变 就要设置 isDirty 为true
      */
     void refreshInstanceInfo() {
-        //重新获取主机名 判断是否发生修改如果有的话 就需要在下次心跳 中同步到 注册中心 这里会被动刷新应用实例信息
+        // 重新获取主机名 判断是否发生修改如果有的话 就需要在下次心跳 中同步到 注册中心 这里会被动刷新应用实例信息 且设置instance为dirty
+        // 针对使用本地 配置文件进行配置的情况 instanceInfo 是不会发生变化的
         applicationInfoManager.refreshDataCenterInfoIfRequired();
-        //更新租约信息 就是读取 有关心跳的配置 比如多久触发一次心跳 最大多少时间没有发出心跳认为是断租
+        // 更新租约信息 就是读取 有关心跳的配置 比如多久触发一次心跳 最大多少时间没有发出心跳认为是断租
+        // 也是从config中获取 如果是本地配置文件一般是不会发生变化的 如果存在配置中心可能会发生变化
         applicationInfoManager.refreshLeaseInfoIfRequired();
 
         InstanceStatus status;
         try {
+            // HealthCheckHandler 该对象当前无作为
             status = getHealthCheckHandler().getStatus(instanceInfo.getStatus());
         } catch (Exception e) {
             logger.warn("Exception from healthcheckHandler.getStatus, setting status to DOWN", e);

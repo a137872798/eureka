@@ -40,7 +40,7 @@ import javax.inject.Singleton;
  * RefreshableInstanceConfig 对应 解析 地址
  */
 @Singleton
-// 由该对象(CloudInstanceConfigProvider) 构建出 CloudInstanceConfig
+// 由该对象(CloudInstanceConfigProvider) 构建出 CloudInstanceConfig  应该是代表从云端获取 配置
 @ProvidedBy(CloudInstanceConfigProvider.class)
 public class CloudInstanceConfig extends PropertiesInstanceConfig implements RefreshableInstanceConfig {
     private static final Logger logger = LoggerFactory.getLogger(CloudInstanceConfig.class);
