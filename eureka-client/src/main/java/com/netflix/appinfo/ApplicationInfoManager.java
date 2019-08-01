@@ -42,12 +42,15 @@ import org.slf4j.LoggerFactory;
  *
  *
  * @author Karthik Ranganathan, Greg Kim
- * 针对 instance 级别的 管理器 内部有针对该实例 状态变更的 监听器 以及更新该实例信息的 api
+ *
  */
 @Singleton
 public class ApplicationInfoManager {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationInfoManager.class);
 
+    /**
+     * 默认情况下 status 不会被映射成 其他的 status
+     */
     private static final InstanceStatusMapper NO_OP_MAPPER = new InstanceStatusMapper() {
         @Override
         public InstanceStatus map(InstanceStatus prev) {
@@ -57,9 +60,6 @@ public class ApplicationInfoManager {
 
     private static ApplicationInfoManager instance = new ApplicationInfoManager(null, null, null);
 
-    /**
-     * 维护 状态切换的监听器
-     */
     protected final Map<String, StatusChangeListener> listeners;
     /**
      * 状态映射对象
@@ -292,12 +292,26 @@ public class ApplicationInfoManager {
         }
     }
 
+    /**
+     * 监听器接口
+     */
     public static interface StatusChangeListener {
+        /**
+         * 获取该监听器的 id
+         * @return
+         */
         String getId();
 
+        /**
+         * 根据事件类型走不同的逻辑
+         * @param statusChangeEvent
+         */
         void notify(StatusChangeEvent statusChangeEvent);
     }
 
+    /**
+     * 实例状态映射
+     */
     public static interface InstanceStatusMapper {
 
         /**
@@ -305,6 +319,7 @@ public class ApplicationInfoManager {
          * the follow up status, if applicable.
          *
          * @return the mapped instance status, or null if the mapping is not applicable.
+         * 将传入的 status 映射成 另一个 status
          */
         InstanceStatus map(InstanceStatus prev);
     }

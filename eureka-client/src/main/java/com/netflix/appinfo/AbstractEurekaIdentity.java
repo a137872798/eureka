@@ -2,6 +2,9 @@ package com.netflix.appinfo;
 
 import javax.annotation.Nullable;
 
+/**
+ * 代表具备 惟一性的 对象
+ */
 public abstract class AbstractEurekaIdentity {
     public static final String PREFIX = "DiscoveryIdentity-";
 

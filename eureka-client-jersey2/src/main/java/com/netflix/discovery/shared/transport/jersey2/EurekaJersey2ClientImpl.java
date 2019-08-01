@@ -44,25 +44,44 @@ import com.netflix.servo.monitor.Monitors;
 import com.netflix.servo.monitor.Stopwatch;
 
 /**
+ * 将 jersey2 client 对象适配到 eureka的框架中 只是对 client做了一些增强作用 比如关闭 闲置的连接
  * @author Tomasz Bak
  */
 public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
 
     private static final Logger s_logger = LoggerFactory.getLogger(EurekaJersey2ClientImpl.class);
 
+    /**
+     * 应该是指断开连接的时间间隔
+     */
     private static final int HTTP_CONNECTION_CLEANER_INTERVAL_MS = 30 * 1000;
 
+    /**
+     * 使用https
+     */
     private static final String PROTOCOL = "https";
     private static final String PROTOCOL_SCHEME = "SSL";
     private static final int HTTPS_PORT = 443;
     private static final String KEYSTORE_TYPE = "JKS";
 
+    /**
+     * 对应 jersey2 client
+     */
     private final Client apacheHttpClient;
-    
+
+    /**
+     * 断开连接的任务对象
+     */
     private final ConnectionCleanerTask connectionCleanerTask;
 
+    /**
+     * 对应的 client 配置对象
+     */
     ClientConfig jerseyClientConfig;
 
+    /**
+     * 定制定时器对象
+     */
     private final ScheduledExecutorService eurekaConnCleaner =
             Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
 
@@ -89,7 +108,8 @@ public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
             jerseyClientConfig.property(ClientProperties.CONNECT_TIMEOUT, connectionTimeout);
             jerseyClientConfig.property(ClientProperties.READ_TIMEOUT, readTimeout);
             apacheHttpClient = ClientBuilder.newClient(jerseyClientConfig);
-            connectionCleanerTask = new ConnectionCleanerTask(connectionIdleTimeout); 
+            connectionCleanerTask = new ConnectionCleanerTask(connectionIdleTimeout);
+            // 定时 清理空闲连接
             eurekaConnCleaner.scheduleWithFixedDelay(
                     connectionCleanerTask, HTTP_CONNECTION_CLEANER_INTERVAL_MS,
                     HTTP_CONNECTION_CLEANER_INTERVAL_MS,
@@ -111,6 +131,7 @@ public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
     public void destroyResources() {
         if (eurekaConnCleaner != null) {
             // Execute the connection cleaner one final time during shutdown
+            // 最后将连接关闭
             eurekaConnCleaner.execute(connectionCleanerTask);
             eurekaConnCleaner.shutdown();
         }
@@ -119,6 +140,9 @@ public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
         }
     }
 
+    /**
+     * 该 client 的构建器
+     */
     public static class EurekaJersey2ClientBuilder {
 
         private boolean systemSSL;
@@ -135,6 +159,8 @@ public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
         private int connectionTimeout;
         private int readTimeout;
         private int connectionIdleTimeout;
+
+        // 使用的编解码器
         private EncoderWrapper encoderWrapper;
         private DecoderWrapper decoderWrapper;
 
@@ -211,6 +237,7 @@ public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
         }
 
         public EurekaJersey2Client build() {
+            // 同时初始化 clientConfig 对象
             MyDefaultApacheHttpClient4Config config = new MyDefaultApacheHttpClient4Config();
             try {
                 return new EurekaJersey2ClientImpl(
@@ -223,8 +250,12 @@ public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
             }
         }
 
+        /**
+         * clientConfig 对象
+         */
         class MyDefaultApacheHttpClient4Config extends ClientConfig {
             MyDefaultApacheHttpClient4Config() {
+                // 获取 httpConnectionManager 对象
                 PoolingHttpClientConnectionManager cm;
 
                 if (systemSSL) {
@@ -239,6 +270,7 @@ public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
                     addProxyConfiguration();
                 }
 
+                // 使用编解码器生成 provider 对象
                 DiscoveryJerseyProvider discoveryJerseyProvider = new DiscoveryJerseyProvider(encoderWrapper, decoderWrapper);
 //                getSingletons().add(discoveryJerseyProvider);
                 register(discoveryJerseyProvider);
@@ -246,6 +278,7 @@ public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
                 // Common properties to all clients
                 cm.setDefaultMaxPerRoute(maxConnectionsPerHost);
                 cm.setMaxTotal(maxTotalConnections);
+                // 将连接管理对象设置到 client 中
                 property(ApacheClientProperties.CONNECTION_MANAGER, cm);
 
                 String fullUserAgentName = (userAgent == null ? clientName : userAgent) + "/v" + buildVersion();
@@ -319,31 +352,53 @@ public class EurekaJersey2ClientImpl implements EurekaJersey2Client {
         }
     }
 
+    /**
+     * 该 对象用于断开连接
+     */
     private class ConnectionCleanerTask implements Runnable {
 
+        /**
+         * 连接空闲时间 应该是超过这个时间 就断开连接
+         */
         private final int connectionIdleTimeout;
+        /**
+         * 一个监控对象 先不看实现
+         */
         private final BasicTimer executionTimeStats;
+        /**
+         * 计数器对象
+         */
         private final Counter cleanupFailed;
 
+        /**
+         * 使用连接空闲检测时间来初始化
+         * @param connectionIdleTimeout
+         */
         private ConnectionCleanerTask(int connectionIdleTimeout) {
             this.connectionIdleTimeout = connectionIdleTimeout;
             MonitorConfig.Builder monitorConfigBuilder = MonitorConfig.builder("Eureka-Connection-Cleaner-Time");
             executionTimeStats = new BasicTimer(monitorConfigBuilder.build());
             cleanupFailed = new BasicCounter(MonitorConfig.builder("Eureka-Connection-Cleaner-Failure").build());
             try {
+                // 代表要监控该对象
                 Monitors.registerObject(this);
             } catch (Exception e) {
                 s_logger.error("Unable to register with servo.", e);
             }
         }
 
+        /**
+         * 执行逻辑
+         */
         @Override
         public void run() {
             Stopwatch start = executionTimeStats.start();
             try {
+                // 获取 连接管理器对象
                 HttpClientConnectionManager cm = (HttpClientConnectionManager) apacheHttpClient
                         .getConfiguration()
                         .getProperty(ApacheClientProperties.CONNECTION_MANAGER);
+                // 关闭某些连接
                 cm.closeIdleConnections(connectionIdleTimeout, TimeUnit.SECONDS);
             } catch (Throwable e) {
                 s_logger.error("Cannot clean connections", e);

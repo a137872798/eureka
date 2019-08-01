@@ -49,17 +49,27 @@ import static com.netflix.discovery.shared.transport.EurekaHttpResponse.anEureka
 
 /**
  * @author Tomasz Bak
- *      基于 jersey 进行通信  该框架是一个 restFul 框架
+ *      基于 jersey 进行通信  该框架是一个 restFul 框架  那么该对象的发送心跳请求应该是有类似定时器在处理
  */
 public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClient {
 
     private static final Logger logger = LoggerFactory.getLogger(AbstractJersey2EurekaHttpClient.class);
 
     protected final Client jerseyClient;
+    /**
+     * 被访问的 目标url 应该是前缀 后面再根据具体的行为设置url
+     */
     protected final String serviceUrl;
+
+    // 该用户名密码 由传入的url 对象携带
     private final String userName;
     private final String password;
 
+    /**
+     * 使用传入的 client 对象 进行初始化
+     * @param jerseyClient
+     * @param serviceUrl
+     */
     public AbstractJersey2EurekaHttpClient(Client jerseyClient, String serviceUrl) {
         this.jerseyClient = jerseyClient;
         this.serviceUrl = serviceUrl;
@@ -68,7 +78,7 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         String localUserName = null;
         String localPassword = null;
         try {
-            //将 String 转换成URL
+            //将 String 转换成URL   看来 url 上可以携带用户名 和密码
             URI serviceURI = new URI(serviceUrl);
             if (serviceURI.getUserInfo() != null) {
                 String[] credentials = serviceURI.getUserInfo().split(":");
@@ -84,18 +94,28 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         this.password = localPassword;
     }
 
+    /**
+     * 将服务实例注册到 EurekaServer 上
+     * @param info
+     * @return
+     */
     @Override
     public EurekaHttpResponse<Void> register(InstanceInfo info) {
+        // 使用 特殊的命名 规则 apps/ + appName
         String urlPath = "apps/" + info.getAppName();
         Response response = null;
         try {
+            // 生成请求对象
             Builder resourceBuilder = jerseyClient.target(serviceUrl).path(urlPath).request();
+            // 为请求对象设置额外的 properties 和 headers
             addExtraProperties(resourceBuilder);
             addExtraHeaders(resourceBuilder);
+
             response = resourceBuilder
                     .accept(MediaType.APPLICATION_JSON)
                     .acceptEncoding("gzip")
                     .post(Entity.json(info));
+            // 将response 适配成 EurekaHttpResponse
             return anEurekaHttpResponse(response.getStatus()).headers(headersOf(response)).build();
         } finally {
             if (logger.isDebugEnabled()) {
@@ -108,14 +128,22 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         }
     }
 
+    /**
+     * 发起 关闭某个 应用下 某个实例的请求
+     * @param appName
+     * @param id
+     * @return
+     */
     @Override
     public EurekaHttpResponse<Void> cancel(String appName, String id) {
+        // 拼接url
         String urlPath = "apps/" + appName + '/' + id;
         Response response = null;
         try {
             Builder resourceBuilder = jerseyClient.target(serviceUrl).path(urlPath).request();
             addExtraProperties(resourceBuilder);
             addExtraHeaders(resourceBuilder);
+            // 使用 delete 请求 符合 RestFul 风格
             response = resourceBuilder.delete();
             return anEurekaHttpResponse(response.getStatus()).headers(headersOf(response)).build();
         } finally {
@@ -128,6 +156,14 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         }
     }
 
+    /**
+     * 发送心跳检测
+     * @param appName
+     * @param id
+     * @param info
+     * @param overriddenStatus
+     * @return
+     */
     @Override
     public EurekaHttpResponse<InstanceInfo> sendHeartBeat(String appName, String id, InstanceInfo info, InstanceStatus overriddenStatus) {
         String urlPath = "apps/" + appName + '/' + id;
@@ -135,18 +171,23 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         try {
             WebTarget webResource = jerseyClient.target(serviceUrl)
                     .path(urlPath)
+                    // queryParam 应该是在 url 上追加参数吧  要把当前 服务实例的 status 和 最后改动时间 也就是 (dirtyTimestamp) 发送过去
                     .queryParam("status", info.getStatus().toString())
                     .queryParam("lastDirtyTimestamp", info.getLastDirtyTimestamp().toString());
+            // 如果要 修改为某个状态 就修改
             if (overriddenStatus != null) {
                 webResource = webResource.queryParam("overriddenstatus", overriddenStatus.name());
             }
+            // 构建请求对象
             Builder requestBuilder = webResource.request();
             addExtraProperties(requestBuilder);
             addExtraHeaders(requestBuilder);
             requestBuilder.accept(MediaType.APPLICATION_JSON_TYPE);
+            // 使用put 请求 也就是update
             response = requestBuilder.put(Entity.entity("{}", MediaType.APPLICATION_JSON_TYPE)); // Jersey2 refuses to handle PUT with no body
             EurekaHttpResponseBuilder<InstanceInfo> eurekaResponseBuilder = anEurekaHttpResponse(response.getStatus(), InstanceInfo.class).headers(headersOf(response));
             if (response.hasEntity()) {
+                // 返回响应结果
                 eurekaResponseBuilder.entity(response.readEntity(InstanceInfo.class));
             }
             return eurekaResponseBuilder.build();
@@ -160,6 +201,14 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         }
     }
 
+    /**
+     * 更新状态的请求
+     * @param appName
+     * @param id
+     * @param newStatus
+     * @param info
+     * @return
+     */
     @Override
     public EurekaHttpResponse<Void> statusUpdate(String appName, String id, InstanceStatus newStatus, InstanceInfo info) {
         String urlPath = "apps/" + appName + '/' + id + "/status";
@@ -167,7 +216,9 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         try {
             Builder requestBuilder = jerseyClient.target(serviceUrl)
                     .path(urlPath)
+                    // 代表新状态的 名字
                     .queryParam("value", newStatus.name())
+                    // 同时更新最后操作的 时间戳
                     .queryParam("lastDirtyTimestamp", info.getLastDirtyTimestamp().toString())
                     .request();
             addExtraProperties(requestBuilder);
@@ -184,6 +235,13 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         }
     }
 
+    /**
+     * 删除  statusOverride ???
+     * @param appName
+     * @param id
+     * @param info
+     * @return
+     */
     @Override
     public EurekaHttpResponse<Void> deleteStatusOverride(String appName, String id, InstanceInfo info) {
         String urlPath = "apps/" + appName + '/' + id + "/status";
@@ -207,6 +265,11 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         }
     }
 
+    /**
+     * 发起 http 请求 并返回 指定region 下 所有的 Applications
+     * @param regions
+     * @return
+     */
     @Override
     public EurekaHttpResponse<Applications> getApplications(String... regions) {
         return getApplicationsInternal("apps/", regions);
@@ -227,6 +290,11 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         return getApplicationsInternal("svips/" + secureVipAddress, regions);
     }
 
+    /**
+     * 使用 appName 找到对应的 application
+     * @param appName
+     * @return
+     */
     @Override
     public EurekaHttpResponse<Application> getApplication(String appName) {
         String urlPath = "apps/" + appName;
@@ -252,10 +320,17 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         }
     }
 
+    /**
+     * 传入 url  和 指定的region 信息 访问对应的接口 并返回 Applications
+     * @param urlPath
+     * @param regions
+     * @return
+     */
     private EurekaHttpResponse<Applications> getApplicationsInternal(String urlPath, String[] regions) {
         Response response = null;
         try {
             WebTarget webTarget = jerseyClient.target(serviceUrl).path(urlPath);
+            // regions 可以为空
             if (regions != null && regions.length > 0) {
                 webTarget = webTarget.queryParam("regions", StringUtil.join(regions));
             }
@@ -312,10 +387,17 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         }
     }
 
+    /**
+     * 子类实现停机 逻辑
+     */
     @Override
     public void shutdown() {
     }
 
+    /**
+     * 添加用户名密码
+     * @param webResource
+     */
     protected void addExtraProperties(Builder webResource) {
         if (userName != null) {
             webResource.property(HttpAuthenticationFeature.HTTP_AUTHENTICATION_USERNAME, userName)
@@ -325,6 +407,11 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
 
     protected abstract void addExtraHeaders(Builder webResource);
 
+    /**
+     * 从response 中 获取响应头信息
+     * @param response
+     * @return
+     */
     private static Map<String, String> headersOf(Response response) {
         MultivaluedMap<String, String> jerseyHeaders = response.getStringHeaders();
         if (jerseyHeaders == null || jerseyHeaders.isEmpty()) {
@@ -333,6 +420,7 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         Map<String, String> headers = new HashMap<>();
         for (Entry<String, List<String>> entry : jerseyHeaders.entrySet()) {
             if (!entry.getValue().isEmpty()) {
+                // 这里只保存第一个 结果
                 headers.put(entry.getKey(), entry.getValue().get(0));
             }
         }
