@@ -16,8 +16,15 @@
 
 package com.netflix.discovery.shared.resolver;
 
+/**
+ * 抽象成一个具备监听http 请求的对象
+ */
 public interface EurekaEndpoint extends Comparable<Object> {
 
+    /**
+     * 该对象的url
+     * @return
+     */
     String getServiceUrl();
 
     /**
@@ -26,12 +33,28 @@ public interface EurekaEndpoint extends Comparable<Object> {
     @Deprecated
     String getHostName();
 
+    /**
+     * ip 地址
+     * @return
+     */
     String getNetworkAddress();
 
+    /**
+     * 监听的端口
+     * @return
+     */
     int getPort();
 
+    /**
+     * 是否使用ssh 进行访问
+     * @return
+     */
     boolean isSecure();
 
+    /**
+     * 相对路径
+     * @return
+     */
     String getRelativeUri();
 
 }

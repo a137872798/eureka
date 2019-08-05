@@ -128,6 +128,16 @@ public class JerseyEurekaHttpClientFactory implements TransportClientFactory {
         return create(clientConfig, additionalFilters, myInstanceInfo, clientIdentity, Optional.empty(), Optional.empty());
     }
 
+    /**
+     * 构建一个 EurekaHttpClient 对象
+     * @param clientConfig
+     * @param additionalFilters
+     * @param myInstanceInfo
+     * @param clientIdentity
+     * @param sslContext
+     * @param hostnameVerifier
+     * @return
+     */
     public static JerseyEurekaHttpClientFactory create(EurekaClientConfig clientConfig,
                                                        Collection<ClientFilter> additionalFilters,
                                                        InstanceInfo myInstanceInfo,

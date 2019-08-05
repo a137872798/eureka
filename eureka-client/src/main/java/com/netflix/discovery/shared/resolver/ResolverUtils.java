@@ -49,6 +49,7 @@ public final class ResolverUtils {
     }
 
     /**
+     * 返回2个数组对象 第一个代表同一zone 的 所有endpoint 对象 第二个代表其余zone
      * @return returns two element array with first item containing list of endpoints from client's zone,
      *         and in the second list all the remaining ones
      */
@@ -56,12 +57,15 @@ public final class ResolverUtils {
         if (eurekaEndpoints.isEmpty()) {
             return new List[]{Collections.emptyList(), Collections.emptyList()};
         }
+        // 如果没有zone 信息 就将所有元素放到第二个list 中返回
         if (myZone == null) {
             return new List[]{Collections.emptyList(), new ArrayList<>(eurekaEndpoints)};
         }
+        // 预先分配大小
         List<AwsEndpoint> myZoneList = new ArrayList<>(eurekaEndpoints.size());
         List<AwsEndpoint> remainingZonesList = new ArrayList<>(eurekaEndpoints.size());
 
+        // 尝试匹配zone 后存入合适的位置
         for (AwsEndpoint endpoint : eurekaEndpoints) {
             if (myZone.equalsIgnoreCase(endpoint.getZone())) {
                 myZoneList.add(endpoint);

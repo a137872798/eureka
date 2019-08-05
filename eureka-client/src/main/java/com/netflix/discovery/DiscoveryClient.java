@@ -167,6 +167,7 @@ public class DiscoveryClient implements EurekaClient {
     private final AtomicReference<Applications> localRegionApps = new AtomicReference<Applications>();
     private final Lock fetchRegistryUpdateLock = new ReentrantLock();
     // monotonically increasing generation counter to ensure stale threads do not reset registry to an older version
+    // 代表拉取了几次注册中心???
     private final AtomicLong fetchRegistryGeneration;
     /**
      * 实例信息 管理对象 代表本机自身
@@ -220,39 +221,74 @@ public class DiscoveryClient implements EurekaClient {
     private ApplicationInfoManager.StatusChangeListener statusChangeListener;
 
     /**
-     * 将自身信息 发送到远端注册中心
+     * 将自身信息 发送到远端注册中心  对于 eurekaServer 来说 注册中心是什么 设置的 url 是否一定能找到注册中心 目前url 后缀是 appName
      */
     private InstanceInfoReplicator instanceInfoReplicator;
 
+    /**
+     * 注册中心的数量
+     */
     private volatile int registrySize = 0;
+    /**
+     * 最后一次 拉取注册中心信息的时间  (注册中心 列表从哪里获取)
+     */
     private volatile long lastSuccessfulRegistryFetchTimestamp = -1;
+    /**
+     * 最后一次发送心跳的时间
+     */
     private volatile long lastSuccessfulHeartbeatTimestamp = -1;
+
+    // 针对 拉取注册中心 和发送心跳的监控对象
     private final ThresholdLevelsMetric heartbeatStalenessMonitor;
     private final ThresholdLevelsMetric registryStalenessMonitor;
 
+    /**
+     * 具备注册自身信息 和 拉取 其他服务的 client 对象是否关闭
+     */
     private final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
+    /**
+     * 本机自身作为 client 时的配置对象
+     */
     protected final EurekaClientConfig clientConfig;
+    /**
+     * 传输层配置对象
+     */
     protected final EurekaTransportConfig transportConfig;
 
+    /**
+     * 启动耗时
+     */
     private final long initTimestampMs;
 
     /**
      * eureka 传输层对象 进行http 交互 都委托给该对象
      */
     private static final class EurekaTransport {
+        /**
+         * 具备关闭功能的 一个 endpoint  (代表 监听http请求的对象)
+         */
         private ClosableResolver bootstrapResolver;
         private TransportClientFactory transportClientFactory;
 
         /**
-         * 用来进行 注册的 client 对象
+         * 用来进行 注册的 client 对象  该对象负责注册自身
          */
         private EurekaHttpClient registrationClient;
+        /**
+         * 创建eurekaHttpClient 的工厂对象
+         */
         private EurekaHttpClientFactory registrationClientFactory;
 
+        /**
+         * 该对象负责查询其他服务
+         */
         private EurekaHttpClient queryClient;
         private EurekaHttpClientFactory queryClientFactory;
 
+        /**
+         * 关闭管理的 client
+         */
         void shutdown() {
             if (registrationClientFactory != null) {
                 registrationClientFactory.shutdown();
@@ -312,6 +348,11 @@ public class DiscoveryClient implements EurekaClient {
         this(ApplicationInfoManager.getInstance(), config, args);
     }
 
+    /**
+     * 监听到 servlet 启动时 会调用该方法 创建 具备 注册自身信息和发现服务列表的client
+     * @param applicationInfoManager
+     * @param config
+     */
     public DiscoveryClient(ApplicationInfoManager applicationInfoManager, EurekaClientConfig config) {
         this(applicationInfoManager, config, null);
     }
@@ -324,13 +365,24 @@ public class DiscoveryClient implements EurekaClient {
         this(applicationInfoManager, config, (AbstractDiscoveryClientOptionalArgs) args);
     }
 
+    /**
+     * 初始化 DiscoveryClient
+     * @param applicationInfoManager info的包装对象
+     * @param config client配置对象
+     * @param args 初始化参数 当通过监听servletContext 生命周期时为null
+     */
     public DiscoveryClient(ApplicationInfoManager applicationInfoManager, final EurekaClientConfig config, AbstractDiscoveryClientOptionalArgs args) {
+        // 这里传入一个 指定的 备份注册中心
         this(applicationInfoManager, config, args, new Provider<BackupRegistry>() {
+            /**
+             * 备份注册中心对象
+             */
             private volatile BackupRegistry backupRegistryInstance;
 
             @Override
             public synchronized BackupRegistry get() {
                 if (backupRegistryInstance == null) {
+                    // 尝试从配置文件中获取 备份注册中心实现类
                     String backupRegistryClassName = config.getBackupRegistryImpl();
                     if (null != backupRegistryClassName) {
                         try {
@@ -347,6 +399,7 @@ public class DiscoveryClient implements EurekaClient {
 
                     if (backupRegistryInstance == null) {
                         logger.warn("Using default backup registry implementation which does not do anything.");
+                        // 默认采用空实现
                         backupRegistryInstance = new NotImplementedRegistryImpl();
                     }
                 }
@@ -356,6 +409,13 @@ public class DiscoveryClient implements EurekaClient {
         });
     }
 
+    /**
+     *
+     * @param applicationInfoManager  实例info 包装对象
+     * @param config client 配置对象
+     * @param args 一般为null
+     * @param backupRegistryProvider 备份的注册中心对象
+     */
     @Inject
     DiscoveryClient(ApplicationInfoManager applicationInfoManager, EurekaClientConfig config, AbstractDiscoveryClientOptionalArgs args,
                     Provider<BackupRegistry> backupRegistryProvider) {
@@ -365,6 +425,7 @@ public class DiscoveryClient implements EurekaClient {
             this.eventListeners.addAll(args.getEventListeners());
             this.preRegistrationHandler = args.preRegistrationHandler;
         } else {
+            // 一般情况下 都为null
             this.healthCheckCallbackProvider = null;
             this.healthCheckHandlerProvider = null;
             this.preRegistrationHandler = null;
@@ -385,20 +446,27 @@ public class DiscoveryClient implements EurekaClient {
 
         this.backupRegistryProvider = backupRegistryProvider;
 
+        // 基于hash 值进行打乱
         this.urlRandomizer = new EndpointUtils.InstanceInfoBasedUrlRandomizer(instanceInfo);
+        // 刚创建时 给本机设置一个 默认的 空 Applications
         localRegionApps.set(new Applications());
 
         fetchRegistryGeneration = new AtomicLong(0);
 
+        // 指定待拉取的远端region
         remoteRegionsToFetch = new AtomicReference<String>(clientConfig.fetchRegistryForRemoteRegions());
+        // 可能上面的值是多个拼接的
         remoteRegionsRef = new AtomicReference<>(remoteRegionsToFetch.get() == null ? null : remoteRegionsToFetch.get().split(","));
 
+        // 是否要从 eurekaServer 拉取数据  默认为true
         if (config.shouldFetchRegistry()) {
+            // 测量对象 先不管
             this.registryStalenessMonitor = new ThresholdLevelsMetric(this, METRIC_REGISTRY_PREFIX + "lastUpdateSec_", new long[]{15L, 30L, 60L, 120L, 240L, 480L});
         } else {
             this.registryStalenessMonitor = ThresholdLevelsMetric.NO_OP_METRIC;
         }
 
+        // 本实例是否需要注册到 eureka  如果本身是 eurekaServer 是不需要注册的
         if (config.shouldRegisterWithEureka()) {
             this.heartbeatStalenessMonitor = new ThresholdLevelsMetric(this, METRIC_REGISTRATION_PREFIX + "lastHeartbeatSec_", new long[]{15L, 30L, 60L, 120L, 240L, 480L});
         } else {
@@ -407,12 +475,14 @@ public class DiscoveryClient implements EurekaClient {
 
         logger.info("Initializing Eureka in region {}", clientConfig.getRegion());
 
+        // 如果既不需要注册到 eurekaServer 也不用从eurekaServer 上拉取数据  下面的操作应该是帮助 GC 回收
         if (!config.shouldRegisterWithEureka() && !config.shouldFetchRegistry()) {
             logger.info("Client configured to neither register nor query for data.");
             scheduler = null;
             heartbeatExecutor = null;
             cacheRefreshExecutor = null;
             eurekaTransport = null;
+            // 默认使用的 region 是  us-east-1
             instanceRegionChecker = new InstanceRegionChecker(new PropertyBasedAzToRegionMapper(config), clientConfig.getRegion());
 
             // This is a bit of hack to allow for existing code using DiscoveryManager.getInstance()
@@ -427,6 +497,7 @@ public class DiscoveryClient implements EurekaClient {
             return;  // no need to setup up an network tasks and we are done
         }
 
+        // 开始创建 定时任务
         try {
             // default size of 2 - 1 each for heartbeat and cacheRefresh
             scheduler = Executors.newScheduledThreadPool(2,
@@ -435,8 +506,10 @@ public class DiscoveryClient implements EurekaClient {
                             .setDaemon(true)
                             .build());
 
+            // 设置关于心跳的线程池
             heartbeatExecutor = new ThreadPoolExecutor(
                     1, clientConfig.getHeartbeatExecutorThreadPoolSize(), 0, TimeUnit.SECONDS,
+                    // 该对象好像一定要队列中元素被移除才能添加新的元素
                     new SynchronousQueue<Runnable>(),
                     new ThreadFactoryBuilder()
                             .setNameFormat("DiscoveryClient-HeartbeatExecutor-%d")
@@ -444,6 +517,7 @@ public class DiscoveryClient implements EurekaClient {
                             .build()
             );  // use direct handoff
 
+            // 必须等待 上一个拉取任务结束才能添加新的拉取任务   为什么默认的线程数是5 默认情况下任务会先分配给核心线程池 那么不就代表能同时执行 5 个任务了吗
             cacheRefreshExecutor = new ThreadPoolExecutor(
                     1, clientConfig.getCacheRefreshExecutorThreadPoolSize(), 0, TimeUnit.SECONDS,
                     new SynchronousQueue<Runnable>(),
@@ -454,6 +528,7 @@ public class DiscoveryClient implements EurekaClient {
             );  // use direct handoff
 
             eurekaTransport = new EurekaTransport();
+            // 为transport 设置定时任务
             scheduleServerEndpointTask(eurekaTransport, args);
 
             AzToRegionMapper azToRegionMapper;
@@ -509,10 +584,15 @@ public class DiscoveryClient implements EurekaClient {
                 initTimestampMs, this.getApplications().size());
     }
 
+    /**
+     * 开启定时任务
+     * @param eurekaTransport 传输对象
+     * @param args 一般为null
+     */
     private void scheduleServerEndpointTask(EurekaTransport eurekaTransport,
                                             AbstractDiscoveryClientOptionalArgs args) {
 
-            
+
         Collection<?> additionalFilters = args == null
                 ? Collections.emptyList()
                 : args.additionalFilters;
@@ -529,6 +609,7 @@ public class DiscoveryClient implements EurekaClient {
         // Ignore the raw types warnings since the client filter interface changed between jersey 1/2
         @SuppressWarnings("rawtypes")
         TransportClientFactories transportClientFactories = argsTransportClientFactories == null
+                // 生成 默认工厂
                 ? new Jersey1TransportClientFactories()
                 : argsTransportClientFactories;
                 
@@ -548,7 +629,9 @@ public class DiscoveryClient implements EurekaClient {
             @Override
             public Applications getApplications(int stalenessThreshold, TimeUnit timeUnit) {
                 long thresholdInMs = TimeUnit.MILLISECONDS.convert(stalenessThreshold, timeUnit);
+                // 获取距离上次拉取成功的时间间隔
                 long delay = getLastSuccessfulRegistryFetchTimePeriod();
+                // 代表过时了
                 if (delay > thresholdInMs) {
                     logger.info("Local registry is too stale for local lookup. Threshold:{}, actual:{}",
                             thresholdInMs, delay);
@@ -880,7 +963,7 @@ public class DiscoveryClient implements EurekaClient {
 
     /**
      * Register with the eureka service by making the appropriate REST call.
-     * 通过 restFul 风格访问 将自身信息注册到 eurekaServer 上
+     * 通过 restFul 风格访问 将自身信息注册到 eurekaServer 上  这里的url 是否一定能找到对应的注册中心???
      */
     boolean register() throws Throwable {
         logger.info(PREFIX + "{}: registering service...", appPathIdentifier);

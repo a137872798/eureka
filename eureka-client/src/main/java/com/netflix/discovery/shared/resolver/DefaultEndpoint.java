@@ -22,20 +22,37 @@ import java.util.Collections;
 import java.util.List;
 
 /**
+ * 默认的端点对象 携带 端口 ip 等信息
  * @author Tomasz Bak
  */
 public class DefaultEndpoint implements EurekaEndpoint {
 
+    /**
+     * ip地址
+     */
     protected final String networkAddress;
+    /**
+     * 端口号
+     */
     protected final int port;
+    /**
+     * 是否使用SSH
+     */
     protected final boolean isSecure;
+    /**
+     * 相对路径
+     */
     protected final String relativeUri;
+    /**
+     * 服务url
+     */
     protected final String serviceUrl;
 
     public DefaultEndpoint(String serviceUrl) {
         this.serviceUrl = serviceUrl;
 
         try {
+            // 获取 url 上各个属性
             URL url = new URL(serviceUrl);
             this.networkAddress = url.getHost();
             this.port = url.getPort();
@@ -100,6 +117,14 @@ public class DefaultEndpoint implements EurekaEndpoint {
         return relativeUri;
     }
 
+    /**
+     * 根据传入的 一组 host 创建 一组对应的 endpoint
+     * @param hostNames
+     * @param port
+     * @param isSecure
+     * @param relativeUri
+     * @return
+     */
     public static List<EurekaEndpoint> createForServerList(
             List<String> hostNames, int port, boolean isSecure, String relativeUri) {
         if (hostNames.isEmpty()) {

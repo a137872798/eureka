@@ -5,6 +5,7 @@ import com.netflix.config.DynamicPropertyFactory;
 import static com.netflix.discovery.shared.transport.PropertyBasedTransportConfigConstants.*;
 
 /**
+ * 默认的传输层配置对象 也是将请求委托给内部的 config
  * @author David Liu
  */
 public class DefaultEurekaTransportConfig implements EurekaTransportConfig {

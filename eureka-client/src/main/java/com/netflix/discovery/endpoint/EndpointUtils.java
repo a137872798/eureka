@@ -29,14 +29,14 @@ public class EndpointUtils {
     }
 
     /**
-     * 用于生成随机函数的接口
+     * 基于hash 值进行打乱
      */
     public static interface ServiceUrlRandomizer {
         void randomize(List<String> urlList);
     }
 
     /**
-     * 基于实例url 生成随机数
+     * 基于hash 值进行打乱
      */
     public static class InstanceInfoBasedUrlRandomizer implements ServiceUrlRandomizer {
         private final InstanceInfo instanceInfo;
@@ -60,6 +60,7 @@ public class EndpointUtils {
             if (instanceHashcode < 0) {
                 instanceHashcode = instanceHashcode * -1;
             }
+            // 好像将某个下标前的 实例移动到后面
             int backupInstance = instanceHashcode % listSize;
             for (int i = 0; i < backupInstance; i++) {
                 String zone = urlList.remove(0);
@@ -265,7 +266,8 @@ public class EndpointUtils {
 
         //获取到 合适的 zone 默认情况下返回第一个
         String zone = availZones[myZoneOffset];
-        //找到 该 zone 的 全部 注册中心(eurekaServer)
+        // 找到 该 zone 的 全部 注册中心(eurekaServer)  也就是 service-url:default-zone 对应的值 也就是每台机器 都会在service-url: default-zone 中设置 注册中心的地址 而zone 代表访问的注册中心属于哪个zone
+        // 之后就会优先选择匹配的zone 进行访问
         List<String> serviceUrls = clientConfig.getEurekaServerServiceUrls(zone);
         if (serviceUrls != null) {
             //按照顺序 加入到 map 中
@@ -386,9 +388,9 @@ public class EndpointUtils {
      * 从 config 中 剥离 region 属性
      */
     public static String getRegion(EurekaClientConfig clientConfig) {
+        // 默认情况下 region的属性是 us-east-1 (没有设置的情况下)
         String region = clientConfig.getRegion();
         if (region == null) {
-            // 默认情况返回 default 作为 region
             region = DEFAULT_REGION;
         }
         region = region.trim().toLowerCase();

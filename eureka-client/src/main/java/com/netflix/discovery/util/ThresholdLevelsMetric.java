@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
  * would be mapped to gauge values {30s=0, 60s=1, 120=0, 240s=0, 480s=0, unlimited=0}.
  *
  * @author Tomasz Bak
+ * 监控对象 先不看
  */
 public class ThresholdLevelsMetric {
 
@@ -36,11 +37,18 @@ public class ThresholdLevelsMetric {
 
     private static final Logger logger = LoggerFactory.getLogger(ThresholdLevelsMetric.class);
 
+    /**
+     * 延迟级别
+     */
     private final long[] levels;
+    /**
+     * Long 型的测量器
+     */
     private final LongGauge[] gauges;
 
     public ThresholdLevelsMetric(Object owner, String prefix, long[] levels) {
         this.levels = levels;
+        // 创建 延迟级别 等量的测量器
         this.gauges = new LongGauge[levels.length];
         for (int i = 0; i < levels.length; i++) {
             String name = prefix + String.format("%05d", levels[i]);
@@ -89,6 +97,9 @@ public class ThresholdLevelsMetric {
         }
     }
 
+    /**
+     * noop 的阈值测量器
+     */
     public static class NoOpThresholdLevelMetric extends ThresholdLevelsMetric {
 
         public NoOpThresholdLevelMetric() {

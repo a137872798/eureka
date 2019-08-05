@@ -109,7 +109,7 @@ public class Applications {
 
     /**
      * Create a new, empty Eureka application list.
-     * 一般不会通过该方式 进行创建
+     * 初始化 DiscoveryClient 时  会以该种方式初始化对象
      */
     public Applications() {
         this(null, -1L, Collections.emptyList());

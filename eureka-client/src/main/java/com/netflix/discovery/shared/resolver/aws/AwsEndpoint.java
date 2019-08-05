@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
+ * AWS 端点 就是在原有端点上抽象出 Zone 和 Region 的属性
  * @author David Liu
  */
 public class AwsEndpoint extends DefaultEndpoint {
@@ -34,6 +35,16 @@ public class AwsEndpoint extends DefaultEndpoint {
         return zone;
     }
 
+    /**
+     * 拓展父类方法 添加了 region 和 zone 的属性
+     * @param hostNames
+     * @param port
+     * @param isSecure
+     * @param relativeUri
+     * @param region
+     * @param zone
+     * @return
+     */
     public static List<AwsEndpoint> createForServerList(
             List<String> hostNames, int port, boolean isSecure, String relativeUri, String region,String zone) {
         if (hostNames.isEmpty()) {

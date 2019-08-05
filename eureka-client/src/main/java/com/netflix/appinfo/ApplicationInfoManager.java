@@ -214,7 +214,7 @@ public class ApplicationInfoManager {
      * server on next heartbeat.
      *
      * see {@link InstanceInfo#getHostName()} for explanation on why the hostname is used as the default address
-     *      更新当前主机信息 相当于 fetch
+     *      更新当前主机信息 如果是基于本地配置 不会发生变化 否则会从 类似于 配置中心的地方 定期获取最新配置
      */
     public void refreshDataCenterInfoIfRequired() {
         // 获取应用实例的 地址 准备更新信息

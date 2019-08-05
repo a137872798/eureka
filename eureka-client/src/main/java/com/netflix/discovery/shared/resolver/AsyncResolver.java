@@ -24,6 +24,7 @@ import static com.netflix.discovery.EurekaClientNames.METRIC_RESOLVER_PREFIX;
 /**
  * An async resolver that keeps a cached version of the endpoint list value for gets, and updates this cache
  * periodically in a different thread.
+ * 异步解析器
  *
  * @author David Liu
  */
@@ -32,17 +33,32 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
 
     // Note that warm up is best effort. If the resolver is accessed by multiple threads pre warmup,
     // only the first thread will block for the warmup (up to the configurable timeout).
+    /**
+     * 是否已经开始预热
+     */
     private final AtomicBoolean warmedUp = new AtomicBoolean(false);
+    /**
+     * 是否开始计时
+     */
     private final AtomicBoolean scheduled = new AtomicBoolean(false);
 
     private final String name;    // a name for metric purposes
+    /**
+     * 内部的集群解析器代理对象
+     */
     private final ClusterResolver<T> delegate;
     private final ScheduledExecutorService executorService;
     private final ThreadPoolExecutor threadPoolExecutor;
     private final TimedSupervisorTask backgroundTask;
     private final AtomicReference<List<T>> resultsRef;
 
+    /**
+     * 刷新时间间隔
+     */
     private final int refreshIntervalMs;
+    /**
+     * 预热超时时间
+     */
     private final int warmUpTimeoutMs;
 
     // Metric timestamp, tracking last time when data were effectively changed.
@@ -68,9 +84,10 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
     }
 
     /**
-     * Create an async resolver with a preset initial value. WHen this resolver is called for the first time,
+     * Create an async resolver with a preset initial value. When this resolver is called for the first time,
      * there will be no warm up and the initial value will be returned. The periodic update task will not be
      * scheduled until after the first time getClusterEndpoints call.
+     * 创建异步解析器
      */
     public AsyncResolver(String name,
                          ClusterResolver<T> delegate,

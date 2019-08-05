@@ -122,7 +122,7 @@ public final class EurekaHttpClients {
             }
         }
 
-        // if all else fails, return the default
+        // if all else fails, return the default  默认情况
         return defaultBootstrapResolver(clientConfig, myInstanceInfo);
     }
 
@@ -132,19 +132,27 @@ public final class EurekaHttpClients {
      */
     static ClosableResolver<AwsEndpoint> defaultBootstrapResolver(final EurekaClientConfig clientConfig,
                                                                   final InstanceInfo myInstanceInfo) {
+        // 在配置文件中可能存在的一种设置 zone 的方式就是 eureka.region.zone...  如果没有的情况下 就会尝试获取 defaultZone 属性
+        // 而defaultZone 可能会对应的值 是 default 代表默认的地区  也有可能是 http://localhost:8761/eureka/ 这种格式
         String[] availZones = clientConfig.getAvailabilityZones(clientConfig.getRegion());
+        // 获取地区信息 默认返回defaultZone 的 第一个值
         String myZone = InstanceInfo.getZone(availZones, myInstanceInfo);
 
+        // 地区亲和集群解析器  也就是默认返回 同一zone的 eurekaServer 对象 其余的大乱顺序
         ClusterResolver<AwsEndpoint> delegateResolver = new ZoneAffinityClusterResolver(
+                // 具备实际解析能力的对象  这里是使用装饰器 在外包了一层ZoneAffinity 逻辑  这里传入了本机的instanceInfo
                 new ConfigClusterResolver(clientConfig, myInstanceInfo),
                 myZone,
                 true
         );
 
+        // 获取注册中心的 一组 endpoint
         List<AwsEndpoint> initialValue = delegateResolver.getClusterEndpoints();
         if (initialValue.isEmpty()) {
+            // 初始化 eurekaServer endpoint 失败 直接返回
             String msg = "Initial resolution of Eureka server endpoints failed. Check ConfigClusterResolver logs for more info";
             logger.error(msg);
+            // 快速失败抛出异常
             failFastOnInitCheck(clientConfig, msg);
         }
 

@@ -21,18 +21,32 @@ import org.slf4j.LoggerFactory;
  * Wrapped subtasks must be thread safe.
  *
  * @author David Qiang Liu
- *      拓展jdk 原生的定时器
+ *      一个定时任务对象 用于统计成功次数 超时次数等
  */
 public class TimedSupervisorTask extends TimerTask {
     private static final Logger logger = LoggerFactory.getLogger(TimedSupervisorTask.class);
 
+    // Counter 接口 只有2个方法 一个是increment()  一个是 increment(num) 代表修改计数值
+
     /**
-     * Counter 接口 只有2个方法 一个是increment()  一个是 increment(num) 代表修改计数值
+     * 成功次数
      */
     private final Counter successCounter;
+    /**
+     * 超时次数
+     */
     private final Counter timeoutCounter;
+    /**
+     * 拒绝次数
+     */
     private final Counter rejectedCounter;
+    /**
+     * 异常次数
+     */
     private final Counter throwableCounter;
+    /**
+     * 线程池级别计数对象
+     */
     private final LongGauge threadPoolLevelGauge;
 
     private final ScheduledExecutorService scheduler;
@@ -43,6 +57,16 @@ public class TimedSupervisorTask extends TimerTask {
     private final AtomicLong delay;
     private final long maxDelay;
 
+    /**
+     * 初始化任务的同时 设置一些统计对象
+     * @param name
+     * @param scheduler
+     * @param executor
+     * @param timeout
+     * @param timeUnit
+     * @param expBackOffBound
+     * @param task
+     */
     public TimedSupervisorTask(String name, ScheduledExecutorService scheduler, ThreadPoolExecutor executor,
                                int timeout, TimeUnit timeUnit, int expBackOffBound, Runnable task) {
         this.scheduler = scheduler;

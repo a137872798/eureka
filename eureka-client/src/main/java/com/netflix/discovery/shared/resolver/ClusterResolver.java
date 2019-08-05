@@ -19,11 +19,20 @@ package com.netflix.discovery.shared.resolver;
 import java.util.List;
 
 /**
+ * 具备获取 本集群所在 region 和 获取本集群所有 endpoint 的能力
  * @author Tomasz Bak
  */
 public interface ClusterResolver<T extends EurekaEndpoint> {
 
+    /**
+     * 获取该集群所在的region
+     * @return
+     */
     String getRegion();
 
+    /**
+     * 获取本集群所有的 endpoint
+     * @return
+     */
     List<T> getClusterEndpoints();
 }
