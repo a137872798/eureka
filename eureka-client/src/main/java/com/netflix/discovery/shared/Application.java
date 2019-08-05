@@ -262,7 +262,7 @@ public class Application {
                     it.remove();
                     // 这个是代表是否需要将本地实例 转移到给定的 remoteRegionsRegistry 容器中
                 } else if (remoteIndexingActive) {
-                    //instanceInfo 中不存在 dataCenter 就返回 localRegion
+                    //instanceInfo 中不存在 dataCenter 就返回 localRegion 也就是本机 region  一般是不存在数据中心的
                     String instanceRegion = instanceRegionChecker.getInstanceRegion(instanceInfo);
                     // 如果获取到的不是本地 region
                     if (!instanceRegionChecker.isLocalRegion(instanceRegion)) {

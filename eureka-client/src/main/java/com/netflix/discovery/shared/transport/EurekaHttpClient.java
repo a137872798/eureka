@@ -64,6 +64,11 @@ public interface EurekaHttpClient {
      */
     EurekaHttpResponse<Applications> getApplications(String... regions);
 
+    /**
+     * 代表获取增量数据
+     * @param regions
+     * @return
+     */
     EurekaHttpResponse<Applications> getDelta(String... regions);
 
     /**

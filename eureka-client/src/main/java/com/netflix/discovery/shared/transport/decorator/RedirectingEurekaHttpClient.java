@@ -42,16 +42,29 @@ import org.slf4j.LoggerFactory;
  * Methods in this class may be called concurrently.
  *
  * @author Tomasz Bak
+ *  直接的 httpClient 对象
  */
 public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
 
     private static final Logger logger = LoggerFactory.getLogger(RedirectingEurekaHttpClient.class);
 
+    /**
+     * 最大遵循数为 10
+     */
     public static final int MAX_FOLLOWED_REDIRECTS = 10;
     private static final Pattern REDIRECT_PATH_REGEX = Pattern.compile("(.*/v2/)apps(/.*)?$");
 
+    /**
+     * 端点信息
+     */
     private final EurekaEndpoint serviceEndpoint;
+    /**
+     * 工厂对象
+     */
     private final TransportClientFactory factory;
+    /**
+     * dns解析器
+     */
     private final DnsService dnsService;
 
     private final AtomicReference<EurekaHttpClient> delegateRef = new AtomicReference<>();
@@ -70,6 +83,12 @@ public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
         TransportUtils.shutdown(delegateRef.getAndSet(null));
     }
 
+    /**
+     * 发起http 请求
+     * @param requestExecutor
+     * @param <R>
+     * @return
+     */
     @Override
     protected <R> EurekaHttpResponse<R> execute(RequestExecutor<R> requestExecutor) {
         EurekaHttpClient currentEurekaClient = delegateRef.get();
@@ -77,6 +96,7 @@ public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
             AtomicReference<EurekaHttpClient> currentEurekaClientRef = new AtomicReference<>(factory.newClient(serviceEndpoint));
             try {
                 EurekaHttpResponse<R> response = executeOnNewServer(requestExecutor, currentEurekaClientRef);
+                // 关闭旧对象 使用新对象
                 TransportUtils.shutdown(delegateRef.getAndSet(currentEurekaClientRef.get()));
                 return response;
             } catch (Exception e) {
@@ -96,6 +116,11 @@ public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
         }
     }
 
+    /**
+     * 创建 redirectClient
+     * @param delegateFactory
+     * @return
+     */
     public static TransportClientFactory createFactory(final TransportClientFactory delegateFactory) {
         final DnsServiceImpl dnsService = new DnsServiceImpl();
         return new TransportClientFactory() {
@@ -111,10 +136,18 @@ public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
         };
     }
 
+    /**
+     * 发起http请求
+     * @param requestExecutor
+     * @param currentHttpClientRef
+     * @param <R>
+     * @return
+     */
     private <R> EurekaHttpResponse<R> executeOnNewServer(RequestExecutor<R> requestExecutor,
                                                          AtomicReference<EurekaHttpClient> currentHttpClientRef) {
         URI targetUrl = null;
         for (int followRedirectCount = 0; followRedirectCount < MAX_FOLLOWED_REDIRECTS; followRedirectCount++) {
+            // 成功情况直接返回结果
             EurekaHttpResponse<R> httpResponse = requestExecutor.execute(currentHttpClientRef.get());
             if (httpResponse.getStatusCode() != 302) {
                 if (followRedirectCount == 0) {
@@ -130,11 +163,13 @@ public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
                 throw new TransportException("Invalid redirect URL " + httpResponse.getLocation());
             }
 
+            // 设置一个新对象
             currentHttpClientRef.getAndSet(null).shutdown();
             currentHttpClientRef.set(factory.newClient(new DefaultEndpoint(targetUrl.toString())));
         }
         String message = "Follow redirect limit crossed for URI " + serviceEndpoint.getServiceUrl();
         logger.warn(message);
+        // 抛出异常
         throw new TransportException(message);
     }
 

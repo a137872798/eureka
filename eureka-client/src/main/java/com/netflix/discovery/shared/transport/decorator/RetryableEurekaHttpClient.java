@@ -141,13 +141,18 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
                     throw new TransportException("Cannot execute request on any known server");
                 }
 
+                // 获取 本次被选中的 endpoint 对象
                 currentEndpoint = candidateHosts.get(endpointIdx++);
+                // 这里就是利用 endpoint 的信息生成一个 client 对象
                 currentHttpClient = clientFactory.newClient(currentEndpoint);
             }
 
             try {
+                // 请求client 并返回响应结果
                 EurekaHttpResponse<R> response = requestExecutor.execute(currentHttpClient);
+                // 结果是否正常
                 if (serverStatusEvaluator.accept(response.getStatusCode(), requestExecutor.getRequestType())) {
+                    // 正常情况下设置 client 否则会 尝试使用其他client
                     delegate.set(currentHttpClient);
                     if (retry > 0) {
                         logger.info("Request execution succeeded on retry #{}", retry);
@@ -160,11 +165,14 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
             }
 
             // Connection error or 5xx from the server that must be retried on another server
+            // 非正常情况 将 client 对象设置为null
             delegate.compareAndSet(currentHttpClient, null);
             if (currentEndpoint != null) {
+                // 将有问题的 endpoint 信息保存到quarantineSet
                 quarantineSet.add(currentEndpoint);
             }
         }
+        // 超过重试次数
         throw new TransportException("Retry limit reached; giving up on completing the request");
     }
 
@@ -177,6 +185,7 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
             @Override
             public EurekaHttpClient newClient() {
                 return new RetryableEurekaHttpClient(name, transportConfig, clusterResolver, delegateFactory,
+                        // 默认重试次数为3次
                         serverStatusEvaluator, DEFAULT_NUMBER_OF_RETRIES);
             }
 
@@ -194,7 +203,7 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
     private List<EurekaEndpoint> getHostCandidates() {
         // 从配置文件上 解析所有可用的 endpoint 对象
         List<EurekaEndpoint> candidateHosts = clusterResolver.getClusterEndpoints();
-        // 只保留交集 该值是可能比 threshold 小的
+        // 只保留交集 该值是可能比 threshold 小的  这个容器中只保留了异常 endpoint 对象
         quarantineSet.retainAll(candidateHosts);
 
         // If enough hosts are bad, we have no choice but start over again
@@ -206,12 +215,14 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
         }
         if (quarantineSet.isEmpty()) {
             // no-op
+            // 这里应该是 异常的endpoint 太多了 没办法即使失败也只能继续调用
         } else if (quarantineSet.size() >= threshold) {
             logger.debug("Clearing quarantined list of size {}", quarantineSet.size());
             quarantineSet.clear();
         } else {
             List<EurekaEndpoint> remainingHosts = new ArrayList<>(candidateHosts.size());
             for (EurekaEndpoint endpoint : candidateHosts) {
+                // 正常情况就会将 不包含在异常容器中的endpoint 设置到 candidateHost中
                 if (!quarantineSet.contains(endpoint)) {
                     remainingHosts.add(endpoint);
                 }

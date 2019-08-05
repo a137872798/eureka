@@ -147,7 +147,7 @@ public abstract class AbstractAzToRegionMapper implements AzToRegionMapper {
      * Tries to determine what region we're in, based on the provided availability zone.
      * @param availabilityZone the availability zone to inspect
      * @return the region, if available; null otherwise
-     * 尝试从 region 中解析出 zone
+     * 尝试使用zone 解析 region
      */
     protected String parseAzToGetRegion(String availabilityZone) {
         // Here we see that whether the availability zone is following a pattern like <region><single letter>

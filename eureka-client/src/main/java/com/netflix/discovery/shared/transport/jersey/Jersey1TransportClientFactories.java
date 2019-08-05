@@ -16,6 +16,9 @@ import com.netflix.discovery.shared.transport.decorator.MetricsCollectingEurekaH
 import com.sun.jersey.api.client.filter.ClientFilter;
 import com.sun.jersey.client.apache4.ApacheHttpClient4;
 
+/**
+ * 默认工厂
+ */
 public class Jersey1TransportClientFactories implements TransportClientFactories<ClientFilter> {
     @Deprecated
     public TransportClientFactory newTransportClientFactory(final Collection<ClientFilter> additionalFilters,
@@ -51,11 +54,21 @@ public class Jersey1TransportClientFactories implements TransportClientFactories
                                                                    final InstanceInfo myInstanceInfo) {
         return newTransportClientFactory(clientConfig, additionalFilters, myInstanceInfo, Optional.empty(), Optional.empty());
     }
-    
+
+    /**
+     * 返回一个 client 工厂对象
+     * @param clientConfig
+     * @param additionalFilters
+     * @param myInstanceInfo
+     * @param sslContext
+     * @param hostnameVerifier
+     * @return
+     */
     @Override
     public TransportClientFactory newTransportClientFactory(EurekaClientConfig clientConfig,
             Collection<ClientFilter> additionalFilters, InstanceInfo myInstanceInfo, Optional<SSLContext> sslContext,
             Optional<HostnameVerifier> hostnameVerifier) {
+        // 最内层的是该工厂 之后的 都是 类似装饰器 增强它
         final TransportClientFactory jerseyFactory = JerseyEurekaHttpClientFactory.create(
                 clientConfig,
                 additionalFilters,
@@ -64,7 +77,8 @@ public class Jersey1TransportClientFactories implements TransportClientFactories
                 sslContext,
                 hostnameVerifier
         );
-        
+
+        // 增加统计能力
         final TransportClientFactory metricsFactory = MetricsCollectingEurekaHttpClient.createFactory(jerseyFactory);
 
         return new TransportClientFactory() {

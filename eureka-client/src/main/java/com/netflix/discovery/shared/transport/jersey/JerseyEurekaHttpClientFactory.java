@@ -55,6 +55,7 @@ import javax.net.ssl.SSLContext;
 import static com.netflix.discovery.util.DiscoveryBuildInfo.buildVersion;
 
 /**
+ * 默认的 httpClient 工厂
  * @author Tomasz Bak
  */
 public class JerseyEurekaHttpClientFactory implements TransportClientFactory {

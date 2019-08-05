@@ -47,6 +47,16 @@ public final class EurekaHttpClients {
     private EurekaHttpClients() {
     }
 
+    /**
+     * 用于从 eurekaServer 上拉取服务列表
+     * @param bootstrapResolver
+     * @param transportClientFactory
+     * @param clientConfig
+     * @param transportConfig
+     * @param myInstanceInfo
+     * @param applicationsSource
+     * @return
+     */
     public static EurekaHttpClientFactory queryClientFactory(ClusterResolver bootstrapResolver,
                                                              TransportClientFactory transportClientFactory,
                                                              EurekaClientConfig clientConfig,
@@ -54,7 +64,9 @@ public final class EurekaHttpClients {
                                                              InstanceInfo myInstanceInfo,
                                                              ApplicationsResolver.ApplicationsSource applicationsSource) {
 
+        // 默认为true  代表使用 bootstrapResolver 去解析
         ClosableResolver queryResolver = transportConfig.useBootstrapResolverForQuery()
+                // 屏蔽了 shutdown 方法 (将该方法变为 noop)   原本 是将内部的一些定时器关闭
                 ? wrapClosable(bootstrapResolver)
                 : queryClientResolver(bootstrapResolver, transportClientFactory,
                 clientConfig, transportConfig, myInstanceInfo, applicationsSource);
@@ -62,7 +74,7 @@ public final class EurekaHttpClients {
     }
 
     /**
-     * 生成一个 具备将自身注册到 registry的client
+     * 生成一个 具备 重连 定时reconnector 的对象   用于 注册到 eurekaServer
      * @param bootstrapResolver
      * @param transportClientFactory
      * @param transportConfig
@@ -93,11 +105,14 @@ public final class EurekaHttpClients {
                 // 返回一个 会定期销毁自身的 client 对象
                 return new SessionedEurekaHttpClient(
                         name,
+                        // 生成具备重连功能的client
                         RetryableEurekaHttpClient.createFactory(
                                 name,
                                 transportConfig,
                                 clusterResolver,
+                                // 为 retryable 创建client 的 工厂  生成client 是通过传入的 工厂对象
                                 RedirectingEurekaHttpClient.createFactory(transportClientFactory),
+                                // 传入的是 遗留评估对象???
                                 ServerStatusEvaluators.legacyEvaluator()),
                         transportConfig.getSessionedClientReconnectIntervalSeconds() * 1000
                 );
