@@ -23,6 +23,9 @@ import com.netflix.discovery.shared.transport.decorator.EurekaHttpClientDecorato
  */
 public final class ServerStatusEvaluators {
 
+    /**
+     * 延迟评估
+     */
     private static final ServerStatusEvaluator LEGACY_EVALUATOR = new ServerStatusEvaluator() {
         @Override
         public boolean accept(int statusCode, RequestType requestType) {
@@ -41,6 +44,9 @@ public final class ServerStatusEvaluators {
         }
     };
 
+    /**
+     * 代表 只处理 200~300 的数据
+     */
     private static final ServerStatusEvaluator HTTP_SUCCESS_EVALUATOR = new ServerStatusEvaluator() {
         @Override
         public boolean accept(int statusCode, RequestType requestType) {

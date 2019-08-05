@@ -49,6 +49,9 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
     private final ClusterResolver<T> delegate;
     private final ScheduledExecutorService executorService;
     private final ThreadPoolExecutor threadPoolExecutor;
+    /**
+     * 具备统计功能的task
+     */
     private final TimedSupervisorTask backgroundTask;
     private final AtomicReference<List<T>> resultsRef;
 
@@ -87,7 +90,7 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
      * Create an async resolver with a preset initial value. When this resolver is called for the first time,
      * there will be no warm up and the initial value will be returned. The periodic update task will not be
      * scheduled until after the first time getClusterEndpoints call.
-     * 创建异步解析器
+     * 创建异步解析器  initialValues 代表可选的 eurekaServer 列表
      */
     public AsyncResolver(String name,
                          ClusterResolver<T> delegate,
@@ -103,6 +106,7 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
                 0
         );
 
+        // 代表开始预热
         warmedUp.set(true);
     }
 
@@ -139,6 +143,7 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
                         .build()
         );
 
+        // 这里把线程池对象带入到 Task中
         this.backgroundTask = new TimedSupervisorTask(
                 this.getClass().getSimpleName(),
                 executorService,
@@ -149,10 +154,14 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
                 updateTask
         );
 
+        // 看来resultsRef 存放的是注册中心列表  这里先设置一个初始化 并开启一个后台线程定时拉取endpoint 针对从config中获取的情况endpoint是不变的
         this.resultsRef = new AtomicReference<>(initialValue);
         Monitors.registerObject(name, this);
     }
 
+    /**
+     * 关闭线程池 和 后台任务
+     */
     @Override
     public void shutdown() {
         if(Monitors.isObjectRegistered(name, this)) {
@@ -169,8 +178,13 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
         return delegate.getRegion();
     }
 
+    /**
+     * 针对该对象 执行获取 注册中心 Endpoint 是异步操作
+     * @return
+     */
     @Override
     public List<T> getClusterEndpoints() {
+        // 在初始化时 warmedUp 应该已经修改成 true 了
         long delay = refreshIntervalMs;
         if (warmedUp.compareAndSet(false, true)) {
             if (!doWarmUp()) {
@@ -217,6 +231,9 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
         return resultsRef.get().size();  // return directly from the ref and not the method so as to not trigger warming
     }
 
+    /**
+     * 在后台执行获取 endpoint 的任务
+     */
     private final Runnable updateTask = new Runnable() {
         @Override
         public void run() {

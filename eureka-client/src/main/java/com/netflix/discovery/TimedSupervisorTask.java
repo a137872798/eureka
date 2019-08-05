@@ -85,12 +85,17 @@ public class TimedSupervisorTask extends TimerTask {
         Monitors.registerObject(name, this);
     }
 
+    /**
+     * 核心逻辑就是对 执行task 继续了增强 （统计数据）
+     */
     @Override
     public void run() {
         Future<?> future = null;
         try {
+            // 将任务提交给内部线程池
             future = executor.submit(task);
             threadPoolLevelGauge.set((long) executor.getActiveCount());
+            // 阻塞获取结果
             future.get(timeoutMillis, TimeUnit.MILLISECONDS);  // block until done or timeout
             delay.set(timeoutMillis);
             threadPoolLevelGauge.set((long) executor.getActiveCount());

@@ -26,6 +26,7 @@ import com.netflix.discovery.shared.transport.decorator.EurekaHttpClientDecorato
  * mismatches. See https://github.com/Netflix/eureka/issues/628.
  *
  * @author Tomasz Bak
+ * 服务状态评估对象 根据 HTTPStatus 判断要做什么处理
  */
 public interface ServerStatusEvaluator {
     boolean accept(int statusCode, RequestType requestType);

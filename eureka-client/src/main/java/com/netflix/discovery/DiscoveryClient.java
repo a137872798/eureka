@@ -642,6 +642,7 @@ public class DiscoveryClient implements EurekaClient {
             }
         };
 
+        // 生成一个 具备解析 endpoint 能力的对象
         eurekaTransport.bootstrapResolver = EurekaHttpClients.newBootstrapResolver(
                 clientConfig,
                 transportConfig,
@@ -650,6 +651,7 @@ public class DiscoveryClient implements EurekaClient {
                 applicationsSource
         );
 
+        // 判断是否要将自身注册到 eureka
         if (clientConfig.shouldRegisterWithEureka()) {
             EurekaHttpClientFactory newRegistrationClientFactory = null;
             EurekaHttpClient newRegistrationClient = null;

@@ -53,6 +53,7 @@ import static com.netflix.discovery.EurekaClientNames.METRIC_TRANSPORT_PREFIX;
  *
  * @author Tomasz Bak
  * @author Li gang
+ * 可重试的client 工厂
  */
 public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
 
@@ -61,12 +62,30 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
     public static final int DEFAULT_NUMBER_OF_RETRIES = 3;
 
     private final String name;
+    /**
+     * 连接相关的配置对象 内部还是通过委托给eurekaClientConfig 对象来实现
+     */
     private final EurekaTransportConfig transportConfig;
+    /**
+     * 该对象能将 config 中 zone 信息解析出来并抽象成 endpoint 对象
+     */
     private final ClusterResolver clusterResolver;
+    /**
+     * 连接client工厂
+     */
     private final TransportClientFactory clientFactory;
+    /**
+     * 服务状态评估对象
+     */
     private final ServerStatusEvaluator serverStatusEvaluator;
+    /**
+     * 代表允许的重试次数
+     */
     private final int numberOfRetries;
 
+    /**
+     * 维护的代理对象
+     */
     private final AtomicReference<EurekaHttpClient> delegate = new AtomicReference<>();
 
     private final Set<EurekaEndpoint> quarantineSet = new ConcurrentSkipListSet<>();
@@ -86,6 +105,9 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
         Monitors.registerObject(name, this);
     }
 
+    /**
+     * 停止 client
+     */
     @Override
     public void shutdown() {
         TransportUtils.shutdown(delegate.get());
@@ -94,6 +116,12 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
         }
     }
 
+    /**
+     * 增加 重试的逻辑
+     * @param requestExecutor
+     * @param <R>
+     * @return
+     */
     @Override
     protected <R> EurekaHttpResponse<R> execute(RequestExecutor<R> requestExecutor) {
         List<EurekaEndpoint> candidateHosts = null;
@@ -102,6 +130,7 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
             EurekaHttpClient currentHttpClient = delegate.get();
             EurekaEndpoint currentEndpoint = null;
             if (currentHttpClient == null) {
+                // 先获取 代表注册中心的client 对象 一个endpoint 能生成一个 HttpClient 而一个HttpClient 具备与对应注册中心 通信的能力
                 if (candidateHosts == null) {
                     candidateHosts = getHostCandidates();
                     if (candidateHosts.isEmpty()) {
@@ -158,11 +187,18 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
         };
     }
 
+    /**
+     * 获取 候选的 endpoint
+     * @return
+     */
     private List<EurekaEndpoint> getHostCandidates() {
+        // 从配置文件上 解析所有可用的 endpoint 对象
         List<EurekaEndpoint> candidateHosts = clusterResolver.getClusterEndpoints();
+        // 只保留交集 该值是可能比 threshold 小的
         quarantineSet.retainAll(candidateHosts);
 
         // If enough hosts are bad, we have no choice but start over again
+        // transportConfig.getRetryableClientQuarantineRefreshPercentage() 默认值为 0.66
         int threshold = (int) (candidateHosts.size() * transportConfig.getRetryableClientQuarantineRefreshPercentage());
         //Prevent threshold is too large
         if (threshold > candidateHosts.size()) {

@@ -61,12 +61,27 @@ public final class EurekaHttpClients {
         return canonicalClientFactory(EurekaClientNames.QUERY, transportConfig, queryResolver, transportClientFactory);
     }
 
+    /**
+     * 生成一个 具备将自身注册到 registry的client
+     * @param bootstrapResolver
+     * @param transportClientFactory
+     * @param transportConfig
+     * @return
+     */
     public static EurekaHttpClientFactory registrationClientFactory(ClusterResolver bootstrapResolver,
                                                                     TransportClientFactory transportClientFactory,
                                                                     EurekaTransportConfig transportConfig) {
         return canonicalClientFactory(EurekaClientNames.REGISTRATION, transportConfig, bootstrapResolver, transportClientFactory);
     }
 
+    /**
+     * 生成 HttpClient 对象
+     * @param name
+     * @param transportConfig
+     * @param clusterResolver
+     * @param transportClientFactory
+     * @return
+     */
     static EurekaHttpClientFactory canonicalClientFactory(final String name,
                                                           final EurekaTransportConfig transportConfig,
                                                           final ClusterResolver<EurekaEndpoint> clusterResolver,
@@ -75,6 +90,7 @@ public final class EurekaHttpClients {
         return new EurekaHttpClientFactory() {
             @Override
             public EurekaHttpClient newClient() {
+                // 返回一个 会定期销毁自身的 client 对象
                 return new SessionedEurekaHttpClient(
                         name,
                         RetryableEurekaHttpClient.createFactory(
@@ -100,6 +116,15 @@ public final class EurekaHttpClients {
 
     public static final String COMPOSITE_BOOTSTRAP_STRATEGY = "composite";
 
+    /**
+     * 获取一个 endpoint 的解析对象  一般就是从配置文件中解析 zone 相关的 serviceUrl 的 值 并抽象成endpoint 对象
+     * @param clientConfig
+     * @param transportConfig
+     * @param transportClientFactory
+     * @param myInstanceInfo
+     * @param applicationsSource
+     * @return
+     */
     public static ClosableResolver<AwsEndpoint> newBootstrapResolver(
             final EurekaClientConfig clientConfig,
             final EurekaTransportConfig transportConfig,
