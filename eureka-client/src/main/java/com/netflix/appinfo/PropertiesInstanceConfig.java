@@ -92,7 +92,7 @@ public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig im
         appGrpNameFromEnv = ConfigurationManager.getConfigInstance()
                 .getString(FALLBACK_APP_GROUP_KEY, Values.UNKNOWN_APPLICATION);
 
-        // 从eureka-client 文件中 加载配置并设置到 configInstance中
+        // 从eureka-client 文件中 加载配置并设置到 configInstance中  如果没有找到配置文件就会抛出异常  spring cloud 应该是做了适配了
         this.configInstance = Archaius1Utils.initConfig(CommonConstants.CONFIG_FILE_NAME);
     }
 

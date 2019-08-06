@@ -96,16 +96,21 @@ public class RemoteRegionRegistry implements LookupService<String> {
     private volatile boolean readyForServingData;
     private final EurekaHttpClient eurekaHttpClient;
 
+    /**
+     * 初始化远端注册对象 该对象是通过解析 配置文件生成的
+     */
     @Inject
-    public RemoteRegionRegistry(EurekaServerConfig serverConfig,
-                                EurekaClientConfig clientConfig,
-                                ServerCodecs serverCodecs,
-                                String regionName,
-                                URL remoteRegionURL) {
+    public RemoteRegionRegistry(EurekaServerConfig serverConfig, // 本机作为 eurekaServer(注册中心) 的配置对象
+                                EurekaClientConfig clientConfig, // 本机作为 eurekaClient(能够注册到注册中心实例) 的配置对象
+                                ServerCodecs serverCodecs, // 编辑码器
+                                String regionName, // regionName
+                                URL remoteRegionURL // 远端url 可以是 多个 拼接
+                                ) {
         this.serverConfig = serverConfig;
         this.remoteRegionURL = remoteRegionURL;
         this.fetchRegistryTimer = Monitors.newTimer(this.remoteRegionURL.toString() + "_FetchRegistry");
 
+        // 构建client 对象
         EurekaJerseyClientBuilder clientBuilder = new EurekaJerseyClientBuilder()
                 .withUserAgent("Java-EurekaClient-RemoteRegion")
                 .withEncoderWrapper(serverCodecs.getFullJsonCodec())
@@ -128,12 +133,15 @@ public class RemoteRegionRegistry implements LookupService<String> {
                             serverConfig.getRemoteRegionTrustStorePassword()
                     );
         }
+        // 生成client 对象
         discoveryJerseyClient = clientBuilder.build();
         discoveryApacheClient = discoveryJerseyClient.getClient();
 
         // should we enable GZip decoding of responses based on Response Headers?
+        // 是否应该压缩数据
         if (serverConfig.shouldGZipContentFromRemoteRegion()) {
             // compressed only if there exists a 'Content-Encoding' header whose value is "gzip"
+            // 在请求头添加 gzip 代表需要返回压缩数据
             discoveryApacheClient.addFilter(new GZIPContentEncodingFilter(false));
         }
 
@@ -143,13 +151,16 @@ public class RemoteRegionRegistry implements LookupService<String> {
         } catch (UnknownHostException e) {
             logger.warn("Cannot find localhost ip", e);
         }
+        // 生成唯一表示对象 并添加拦截器 填充 ip name id 等信息
         EurekaServerIdentity identity = new EurekaServerIdentity(ip);
         discoveryApacheClient.addFilter(new EurekaIdentityHeaderFilter(identity));
 
         // Configure new transport layer (candidate for injecting in the future)
         EurekaHttpClient newEurekaHttpClient = null;
         try {
+            // 生成集群解析对象 解析后只会返回一个 endpoint 就是 regionName remoteRegionURL 对应的endpoint
             ClusterResolver clusterResolver = StaticClusterResolver.fromURL(regionName, remoteRegionURL);
+            // 创建client 对象 具备 定时重建连接 以及 失败重试功能
             newEurekaHttpClient = EurekaServerHttpClients.createRemoteRegionClient(
                     serverConfig, clientConfig.getTransportConfig(), serverCodecs, clusterResolver);
         } catch (Exception e) {
@@ -158,6 +169,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
         this.eurekaHttpClient = newEurekaHttpClient;
 
         try {
+            // 也就是 remoteRegionRegistry 对象在创建时 就会去对应的注册中心拉取数据了
             if (fetchRegistry()) {
                 this.readyForServingData = true;
             } else {
@@ -219,6 +231,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
     /**
      * Fetch the registry information from the remote region.
      * @return true, if the fetch was successful, false otherwise.
+     * 从注册中心拉取数据
      */
     private boolean fetchRegistry() {
         boolean success;
@@ -226,12 +239,14 @@ public class RemoteRegionRegistry implements LookupService<String> {
 
         try {
             // If the delta is disabled or if it is the first time, get all applications
+            // 首次进入会 走上面
             if (serverConfig.shouldDisableDeltaForRemoteRegions()
                     || (getApplications() == null)
                     || (getApplications().getRegisteredApplications().size() == 0)) {
                 logger.info("Disable delta property : {}", serverConfig.shouldDisableDeltaForRemoteRegions());
                 logger.info("Application is null : {}", getApplications() == null);
                 logger.info("Registered Applications size is zero : {}", getApplications().getRegisteredApplications().isEmpty());
+                // 将全量数据保存到 本地
                 success = storeFullRegistry();
             } else {
                 success = fetchAndStoreDelta();
@@ -362,6 +377,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
      * locally.
      *
      * @return the full registry information.
+     * 从远端拉取所有数据并保存到本地
      */
     public boolean storeFullRegistry() {
         long currentGeneration = fetchRegistryGeneration.get();
@@ -383,6 +399,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
      * Fetch registry information from the remote region.
      * @param delta - true, if the fetch needs to get deltas, false otherwise
      * @return - response which has information about the data.
+     * 从远端拉取数据
      */
     private Applications fetchRemoteRegistry(boolean delta) {
         logger.info("Getting instance registry info from the eureka server : {} , delta : {}", this.remoteRegionURL, delta);

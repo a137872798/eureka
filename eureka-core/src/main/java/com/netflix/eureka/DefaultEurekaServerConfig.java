@@ -507,12 +507,14 @@ public class DefaultEurekaServerConfig implements EurekaServerConfig {
      </PRE>
      * @return A map of region name to remote region URL parsed from the property specified above. If there is no
      * property available, then an empty map is returned.
+     * 获取远端regionUrl 的信息
      */
     @Override
     public Map<String, String> getRemoteRegionUrlsWithName() {
         String propName = namespace + "remoteRegionUrlsWithName";
         String remoteRegionUrlWithNameString = configInstance.getStringProperty(propName, null).get();
         if (null == remoteRegionUrlWithNameString) {
+            // 没有设置的情况返回空属性
             return Collections.emptyMap();
         }
 
@@ -528,8 +530,11 @@ public class DefaultEurekaServerConfig implements EurekaServerConfig {
                                 + "separated by a {}. Ignoring this entry.",
                         new String[]{propName, remoteRegionUrlWithNamePair, pairSplitChar});
             } else {
+                // regionName
                 String regionName = pairSplit[0];
+                // 具体的url
                 String regionUrl = pairSplit[1];
+                // 超过2个 代表 一个region 后面有多个 url 拼接后保存
                 if (pairSplit.length > 2) {
                     StringBuilder regionUrlAssembler = new StringBuilder();
                     for (int i = 1; i < pairSplit.length; i++) {
@@ -557,14 +562,23 @@ public class DefaultEurekaServerConfig implements EurekaServerConfig {
         return remoteRegionUrl;
     }
 
+    /**
+     * 获取白名单 ???  是不是即使指定了 region 同一region 下还有很多 registry 允许配置白名单进行过滤
+     * @param regionName Name of the region for which the application whitelist is to be retrieved. If null a global
+     *                   setting is returned.
+     *
+     * @return
+     */
     @Nullable
     @Override
     public Set<String> getRemoteRegionAppWhitelist(@Nullable String regionName) {
         if (null == regionName) {
             regionName = "global";
         } else {
+            // 获取regionName
             regionName = regionName.trim().toLowerCase();
         }
+        // 获取白名单
         DynamicStringProperty appWhiteListProp =
                 configInstance.getStringProperty(namespace + "remoteRegion." + regionName + ".appWhiteList", null);
         if (null == appWhiteListProp || null == appWhiteListProp.get()) {

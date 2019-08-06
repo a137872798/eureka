@@ -7,6 +7,7 @@ import com.netflix.eureka.registry.rule.InstanceStatusOverrideRule;
  * Container for a result computed by an {@link InstanceStatusOverrideRule}.
  *
  * Created by Nikos Michalakis on 7/13/16.
+ * 修改状态的结果
  */
 public class StatusOverrideResult {
 
@@ -22,6 +23,11 @@ public class StatusOverrideResult {
     // The status computed by the rule.
     private final InstanceInfo.InstanceStatus status;
 
+    /**
+     * 默认匹配成功
+     * @param matches
+     * @param status
+     */
     private StatusOverrideResult(boolean matches, InstanceInfo.InstanceStatus status) {
         this.matches = matches;
         this.status = status;

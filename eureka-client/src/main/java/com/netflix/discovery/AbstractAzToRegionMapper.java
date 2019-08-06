@@ -60,7 +60,7 @@ public abstract class AbstractAzToRegionMapper implements AzToRegionMapper {
     }
 
     /**
-     * 设置 需要拉取的 region
+     * 设置 需要拉取的 region  使用场景 是 针对 discoveryClient 在定时拉取 注册中心服务列表时 会查看配置中的region 是否发生了变化 变化的情况 要在这里更新region 和zone 的映射关系
      * @param regionsToFetch Regions to fetch. This should be the super set of all regions that this mapper should know.
      */
     @Override

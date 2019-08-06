@@ -185,7 +185,7 @@ public class ResponseCacheImpl implements ResponseCache {
                                     Key cloneWithNoRegions = key.cloneWithoutRegions();
                                     regionSpecificKeys.put(cloneWithNoRegions, key);
                                 }
-                                // 通过 key 获取value
+                                // 通过 key 生成 value
                                 Value value = generatePayload(key);
                                 return value;
                             }

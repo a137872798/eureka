@@ -41,7 +41,7 @@ public class Lease<T> {
 
     private T holder;
     /**
-     * 被剔除时间??
+     * 被剔除时间 从外部调用cancel 时 会设置该值 代表该实例对象在这个时刻被移除了之后应该会在哪里使用
      */
     private long evictionTimestamp;
     /**

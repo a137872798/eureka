@@ -24,7 +24,7 @@ public interface AzToRegionMapper {
      * Update the regions that this mapper knows about.
      *
      * @param regionsToFetch Regions to fetch. This should be the super set of all regions that this mapper should know.
-     *                       设置已知的 region ???
+     *                       更新regin数组信息
      */
     void setRegionsToFetch(String[] regionsToFetch);
 

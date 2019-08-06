@@ -129,10 +129,10 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
 
     @Inject
     public PeerAwareInstanceRegistryImpl(
-            EurekaServerConfig serverConfig,
-            EurekaClientConfig clientConfig,
-            ServerCodecs serverCodecs,
-            EurekaClient eurekaClient
+            EurekaServerConfig serverConfig, // eureka-server 抽取的配置对象
+            EurekaClientConfig clientConfig, // eureka-client 抽取的配置对象
+            ServerCodecs serverCodecs, // 编解码器
+            EurekaClient eurekaClient // 具备将自身信息注册到 eurekaServer 和 从 eurekaServer 拉取 实例信息的能力
     ) {
         super(serverConfig, clientConfig, serverCodecs);
         this.eurekaClient = eurekaClient;

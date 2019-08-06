@@ -137,7 +137,8 @@ class InstanceInfoReplicator implements Runnable {
     }
 
     /**
-     * 暂停本次任务并在之后重新执行
+     * 暂停本次任务并在之后重新执行  触发任务有2种情况 一种是定时任务的 后台自动触发 一种是 由外部手动触发 这里就是手动出发的逻辑
+     * 也就是 在 命令下执行更新操作
      * @return
      */
     public boolean onDemandUpdate() {
@@ -149,15 +150,16 @@ class InstanceInfoReplicator implements Runnable {
                     @Override
                     public void run() {
                         logger.debug("Executing on-demand update of local InstanceInfo");
-    
+
+                        // 发现存在 上个任务 也就是通过定时器触发的
                         Future latestPeriodic = scheduledPeriodicRef.get();
-                        // 关闭本次任务
+                        // 关闭这个任务
                         if (latestPeriodic != null && !latestPeriodic.isDone()) {
                             logger.debug("Canceling the latest scheduled update, it will be rescheduled at the end of on demand update");
                             latestPeriodic.cancel(false);
                         }
 
-                        // 重新执行定时任务
+                        // 手动触发
                         InstanceInfoReplicator.this.run();
                     }
                 });
@@ -195,7 +197,6 @@ class InstanceInfoReplicator implements Runnable {
         } finally {
             //将下次任务 存入 定时器 等待执行
             Future next = scheduler.schedule(this, replicationIntervalSeconds, TimeUnit.SECONDS);
-            //更新 future 对象 run 方法应该不会发生 竞争 为什么需要 原子更新
             scheduledPeriodicRef.set(next);
         }
     }

@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
  * Statically configured Eureka server pool.
  *
  * @author Tomasz Bak
+ * 静态集群解析器
  */
 public class StaticClusterResolver<T extends EurekaEndpoint> implements ClusterResolver<T> {
 
@@ -58,6 +59,7 @@ public class StaticClusterResolver<T extends EurekaEndpoint> implements ClusterR
 
     public static ClusterResolver<EurekaEndpoint> fromURL(String regionName, URL serviceUrl) {
         boolean isSecure = "https".equalsIgnoreCase(serviceUrl.getProtocol());
+        // 生成默认端口
         int defaultPort = isSecure ? 443 : 80;
         int port = serviceUrl.getPort() == -1 ? defaultPort : serviceUrl.getPort();
 

@@ -62,8 +62,7 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim, David Liu
- * 该对象 就是eurekaServer 启动引导程序 通过监听 servlet的生命周期
- * eurekaServer 是搭载在tomcat 上的 那么 eurekaclient 呢??? 他们是否使用同一套启动逻辑???
+ * 无论 eurekaServer eurekaClient 都可以将自身注册到 eurekaServer 上所有都有一个clientConfig 对象
  */
 public class EurekaBootStrap implements ServletContextListener {
     private static final Logger logger = LoggerFactory.getLogger(EurekaBootStrap.class);
@@ -191,13 +190,15 @@ public class EurekaBootStrap implements ServletContextListener {
             // 生成默认的 clientConfig  对象 应该会从 eureka-client文件中读取数据(前提是存在该文件) 具体解析配置的逻辑先不看 如果没有该配置文件
             // 会吞掉异常并打印日志 提示找不到 配置文件
             EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
-            // 使用InstanceInfo 和  配置对象生成  client
+            // 使用InstanceInfo 和  配置对象生成  client 启动后就会从默认的 region 开始拉取服务实例列表 和将自身注册到 eurekaServer
             eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig);
         } else {
             applicationInfoManager = eurekaClient.getApplicationInfoManager();
         }
 
+        // 生成同级的 注册中心对象
         PeerAwareInstanceRegistry registry;
+        // info 对象是通过抽取 eureka-client 配置文件中信息生成的 这里可以根据配置中的信息判断是否是 Aws
         if (isAws(applicationInfoManager.getInfo())) {
             registry = new AwsInstanceRegistry(
                     eurekaServerConfig,
@@ -208,8 +209,11 @@ public class EurekaBootStrap implements ServletContextListener {
             awsBinder = new AwsBinderDelegate(eurekaServerConfig, eurekaClient.getEurekaClientConfig(), registry, applicationInfoManager);
             awsBinder.start();
         } else {
+            // 默认情况
             registry = new PeerAwareInstanceRegistryImpl(
+                    // 该对象内 维护了 eureka-server 的信息
                     eurekaServerConfig,
+                    // 获取 eureka-client 的相关信息
                     eurekaClient.getEurekaClientConfig(),
                     serverCodecs,
                     eurekaClient
@@ -298,6 +302,11 @@ public class EurekaBootStrap implements ServletContextListener {
 
     }
 
+    /**
+     * 判断该实例是否是 AWS 就是看 dataCenter 是否是 amazon  一般是 myDataCenter 也就是 依赖于 本地配置文件
+     * @param selfInstanceInfo
+     * @return
+     */
     protected boolean isAws(InstanceInfo selfInstanceInfo) {
         boolean result = DataCenterInfo.Name.Amazon == selfInstanceInfo.getDataCenterInfo().getName();
         logger.info("isAws returned {}", result);

@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
  * Wrapped subtasks must be thread safe.
  *
  * @author David Qiang Liu
- *      一个定时任务对象 用于统计成功次数 超时次数等
+ *      一个定时任务对象 用于统计成功次数 超时次数等 并且能够自动调节任务时间间隔
  */
 public class TimedSupervisorTask extends TimerTask {
     private static final Logger logger = LoggerFactory.getLogger(TimedSupervisorTask.class);
@@ -73,7 +73,9 @@ public class TimedSupervisorTask extends TimerTask {
         this.executor = executor;
         this.timeoutMillis = timeUnit.toMillis(timeout);
         this.task = task;
+        // 默认的任务间隔时间
         this.delay = new AtomicLong(timeoutMillis);
+        // * 一个 指数器对象会 生成最大延迟时间
         this.maxDelay = timeoutMillis * expBackOffBound;
 
         // Initialize the counters and register.
@@ -97,6 +99,7 @@ public class TimedSupervisorTask extends TimerTask {
             threadPoolLevelGauge.set((long) executor.getActiveCount());
             // 阻塞获取结果
             future.get(timeoutMillis, TimeUnit.MILLISECONDS);  // block until done or timeout
+            // 一旦 正常执行后 恢复延迟时间
             delay.set(timeoutMillis);
             threadPoolLevelGauge.set((long) executor.getActiveCount());
             successCounter.increment();
@@ -105,6 +108,7 @@ public class TimedSupervisorTask extends TimerTask {
             timeoutCounter.increment();
 
             long currentDelay = delay.get();
+            // 将当前延时 * 2 更新成 新的延时 并且不允许超过 maxDelay
             long newDelay = Math.min(maxDelay, currentDelay * 2);
             delay.compareAndSet(currentDelay, newDelay);
 
@@ -130,6 +134,7 @@ public class TimedSupervisorTask extends TimerTask {
             }
 
             if (!scheduler.isShutdown()) {
+                // 会根据 delay 动态调整下次任务的时间
                 scheduler.schedule(this, delay.get(), TimeUnit.MILLISECONDS);
             }
         }

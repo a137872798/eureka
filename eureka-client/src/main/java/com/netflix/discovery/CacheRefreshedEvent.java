@@ -5,6 +5,7 @@ package com.netflix.discovery;
  * local cache with information received from the Eureka server.
  * 
  * @author brenuart
+ * 代表缓存刷新事件
  */
 public class CacheRefreshedEvent extends DiscoveryEvent {
     @Override

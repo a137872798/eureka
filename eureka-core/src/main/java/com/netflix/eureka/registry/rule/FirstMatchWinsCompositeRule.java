@@ -11,6 +11,7 @@ import java.util.List;
  * result of the {@link AlwaysMatchInstanceStatusRule}.
  *
  * Created by Nikos Michalakis on 7/13/16.
+ * overrideStatus 匹配对象
  */
 public class FirstMatchWinsCompositeRule implements InstanceStatusOverrideRule {
 
@@ -30,6 +31,13 @@ public class FirstMatchWinsCompositeRule implements InstanceStatusOverrideRule {
         compositeRuleName = ruleNames.toString();
     }
 
+    /**
+     *
+     * @param instanceInfo The instance info whose status we care about.   被处理的实例对象
+     * @param existingLease Does the instance have an existing lease already? If so let's consider that.  对应的租约信息
+     * @param isReplication When overriding consider if we are under a replication mode from other servers.  是否是从其他eurekaServer 上传过来的
+     * @return
+     */
     @Override
     public StatusOverrideResult apply(InstanceInfo instanceInfo,
                                       Lease<InstanceInfo> existingLease,
@@ -40,6 +48,7 @@ public class FirstMatchWinsCompositeRule implements InstanceStatusOverrideRule {
                 return result;
             }
         }
+        // 没找到合适的 对象情况下 使用默认的 rule
         return defaultRule.apply(instanceInfo, existingLease, isReplication);
     }
 
