@@ -171,6 +171,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
         try {
             // 也就是 remoteRegionRegistry 对象在创建时 就会去对应的注册中心拉取数据了
             if (fetchRegistry()) {
+                // 拉取成功就修改该标识 代表 数据被成功拉取到
                 this.readyForServingData = true;
             } else {
                 logger.warn("Failed to fetch remote registry. This means this eureka server is not ready for serving "
@@ -181,6 +182,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
         }
 
         // remote region fetch
+        // 创建一个拉取任务
         Runnable remoteRegionFetchTask = new Runnable() {
             @Override
             public void run() {
@@ -198,6 +200,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
             }
         };
 
+        // 创建专门用于拉取任务的线程池对象
         ThreadPoolExecutor remoteRegionFetchExecutor = new ThreadPoolExecutor(
                 1, serverConfig.getRemoteRegionFetchThreadPoolSize(), 0, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());  // use direct handoff
 
@@ -207,6 +210,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
                         .setDaemon(true)
                         .build());
 
+        // 执行定时任务 能够根据失败自动延迟访问
         scheduler.schedule(
                 new TimedSupervisorTask(
                         "RemoteRegionFetch_" + regionName,
@@ -249,6 +253,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
                 // 将全量数据保存到 本地
                 success = storeFullRegistry();
             } else {
+                // 拉取 delta 数据
                 success = fetchAndStoreDelta();
             }
             logTotalInstances();
@@ -263,12 +268,18 @@ public class RemoteRegionRegistry implements LookupService<String> {
         return success;
     }
 
+    /**
+     * 这个是不是获取增量数据???
+     * @return
+     * @throws Throwable
+     */
     private boolean fetchAndStoreDelta() throws Throwable {
         long currGeneration = fetchRegistryGeneration.get();
         Applications delta = fetchRemoteRegistry(true);
 
         if (delta == null) {
             logger.error("The delta is null for some reason. Not storing this information");
+            // 设置增量数据
         } else if (fetchRegistryGeneration.compareAndSet(currGeneration, currGeneration + 1)) {
             this.applicationsDelta.set(delta);
         } else {
@@ -276,14 +287,17 @@ public class RemoteRegionRegistry implements LookupService<String> {
             logger.warn("Not updating delta as another thread is updating it already");
         }
 
+        // 可能是并发处理了 也可能是没拉取到数据
         if (delta == null) {
             logger.warn("The server does not allow the delta revision to be applied because it is not "
                     + "safe. Hence got the full registry.");
+            // 这里拉取全量数据
             return storeFullRegistry();
         } else {
             String reconcileHashCode = "";
             if (fetchRegistryUpdateLock.tryLock()) {
                 try {
+                    // 将增量数据插入到 apps中
                     updateDelta(delta);
                     reconcileHashCode = getApplications().getReconcileHashCode();
                 } finally {
@@ -381,10 +395,12 @@ public class RemoteRegionRegistry implements LookupService<String> {
      */
     public boolean storeFullRegistry() {
         long currentGeneration = fetchRegistryGeneration.get();
+        // 拉取结果
         Applications apps = fetchRemoteRegistry(false);
         if (apps == null) {
             logger.error("The application is null for some reason. Not storing this information");
         } else if (fetchRegistryGeneration.compareAndSet(currentGeneration, currentGeneration + 1)) {
+            // 设置结果
             applications.set(apps);
             applicationsDelta.set(apps);
             logger.info("Successfully updated registry with the latest content");
@@ -399,13 +415,15 @@ public class RemoteRegionRegistry implements LookupService<String> {
      * Fetch registry information from the remote region.
      * @param delta - true, if the fetch needs to get deltas, false otherwise
      * @return - response which has information about the data.
-     * 从远端拉取数据
+     * 从远端拉取数据   delta = false 代表 执行getApplications 方法
      */
     private Applications fetchRemoteRegistry(boolean delta) {
         logger.info("Getting instance registry info from the eureka server : {} , delta : {}", this.remoteRegionURL, delta);
 
+        // 默认为false
         if (shouldUseExperimentalTransport()) {
             try {
+                // 这里将 发送http请求返回的结果 返回到上层
                 EurekaHttpResponse<Applications> httpResponse = delta ? eurekaHttpClient.getDelta() : eurekaHttpClient.getApplications();
                 int httpStatus = httpResponse.getStatusCode();
                 if (httpStatus >= 200 && httpStatus < 300) {
@@ -421,6 +439,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
             try {
                 String urlPath = delta ? "apps/delta" : "apps/";
 
+                // 也是发起请求返回结果
                 response = discoveryApacheClient.resource(this.remoteRegionURL + urlPath)
                         .accept(MediaType.APPLICATION_JSON_TYPE)
                         .get(ClientResponse.class);

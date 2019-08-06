@@ -34,7 +34,6 @@ import javax.inject.Singleton;
 
 /**
  * Override some methods with aws specific use cases.
- * 增加 有关对端感知的功能
  *
  * @author David Liu
  */

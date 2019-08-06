@@ -106,7 +106,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      */
     private final CircularQueue<Pair<Long, String>> recentCanceledQueue;
     /**
-     * 最近修改的 对象  只有在规定时间内完成续约的对象才会存在里面 存在一个对应的定时任务扫描该列表 存在超时对象就会删除
+     * 保留最近修改的对象 包括 删除 添加 都会往队列中添加元素有个定时任务会清理存在时间过长的对象
      */
     private ConcurrentLinkedQueue<RecentlyChangedItem> recentlyChangedQueue = new ConcurrentLinkedQueue<RecentlyChangedItem>();
 
@@ -193,7 +193,6 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
-     * 针对 serverConfig 来说 这些 server 是同一级的???
      * @throws MalformedURLException
      */
     protected void initRemoteRegionRegistry() throws MalformedURLException {
@@ -962,6 +961,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             // 尝试使用 全局 global 去查询白名单
             whiteList = serverConfig.getRemoteRegionAppWhitelist(null); // see global whitelist.
         }
+        // 白名单为空 也代表允许拉取 只有设置了白名单 且不存在该app 才禁止拉取
         return null == whiteList || whiteList.contains(appName);
     }
 
@@ -1102,6 +1102,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * 获取 delta
      */
     public Applications getApplicationDeltasFromMultipleRegions(String[] remoteRegions) {
+        // 参数为null 的时候 代表获取所有已知remoteRegion的 delta
         if (null == remoteRegions) {
             remoteRegions = allKnownRemoteRegions; // null means all remote regions.
         }
@@ -1109,16 +1110,21 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         boolean includeRemoteRegion = remoteRegions.length != 0;
 
         if (includeRemoteRegion) {
+            // 包含远端region
             GET_ALL_WITH_REMOTE_REGIONS_CACHE_MISS_DELTA.increment();
         } else {
+            // 只是本地的
             GET_ALL_CACHE_MISS_DELTA.increment();
         }
 
         Applications apps = new Applications();
+        // 版本号有什么用???
         apps.setVersion(responseCache.getVersionDeltaWithRegions().get());
+        // 将近期改动的app 都保存到该容器
         Map<String, Application> applicationInstancesMap = new HashMap<String, Application>();
         try {
             write.lock();
+            // 获取最近修改的所有项
             Iterator<RecentlyChangedItem> iter = this.recentlyChangedQueue.iterator();
             logger.debug("The number of elements in the delta queue is :{}", this.recentlyChangedQueue.size());
             while (iter.hasNext()) {
@@ -1135,13 +1141,17 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 app.addInstance(new InstanceInfo(decorateInstanceInfo(lease)));
             }
 
+            // 如果还需要将 remoteRegion 的数据存入
             if (includeRemoteRegion) {
                 for (String remoteRegion : remoteRegions) {
                     RemoteRegionRegistry remoteRegistry = regionNameVSRemoteRegistry.get(remoteRegion);
                     if (null != remoteRegistry) {
+                        // 获取 delta 这个是通过发送http请求 访问 /delta 返回的数据
                         Applications remoteAppsDelta = remoteRegistry.getApplicationDeltas();
                         if (null != remoteAppsDelta) {
+                            // 遍历增量的 app ???
                             for (Application application : remoteAppsDelta.getRegisteredApplications()) {
+                                // 是否在白名单中
                                 if (shouldFetchFromRemoteRegistry(application.getName(), remoteRegion)) {
                                     Application appInstanceTillNow =
                                             apps.getRegisteredApplications(application.getName());
@@ -1159,6 +1169,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 }
             }
 
+            // 拉取远端全量数据
             Applications allApps = getApplicationsFromMultipleRegions(remoteRegions);
             apps.setAppsHashCode(allApps.getReconcileHashCode());
             return apps;
@@ -1173,6 +1184,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * @param appName the application name for which the information is requested.
      * @param id the unique identifier of the instance.
      * @return the information about the instance.
+     * 查询 instanceInfo
      */
     @Override
     public InstanceInfo getInstanceByAppAndId(String appName, String id) {
@@ -1293,6 +1305,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 .setDurationInSecs(leaseDuration)
                 .setEvictionTimestamp(lease.getEvictionTimestamp()).build());
 
+        // 设置协调 discoveryServer ???  如果 info为本机信息 对象 就设为true 否则是false
         info.setIsCoordinatingDiscoveryServer();
         return info;
     }
@@ -1404,6 +1417,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         if (evictionTaskRef.get() != null) {
             evictionTaskRef.get().cancel();
         }
+        // 定时剔除 不需要的对象
         evictionTaskRef.set(new EvictionTask());
         evictionTimer.schedule(evictionTaskRef.get(),
                 serverConfig.getEvictionIntervalTimerInMs(),
@@ -1459,7 +1473,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         long getCompensationTimeMs() {
             // 获取当前时间
             long currNanos = getCurrentTimeNano();
-            // 更新当前使劲按并返回上次的时间
+            // 更新当前时间并返回上次的时间
             long lastNanos = lastExecutionNanosRef.getAndSet(currNanos);
             if (lastNanos == 0L) {
                 return 0L;
@@ -1540,7 +1554,8 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
-     * 定时任务
+     * 定时任务  eurekaServer 每触发一个对应任务时 会往recentlyChangedQueue 中存放一个元素 这里是 通过一个时间段 来清理数据的
+     * 每次收到指定实例的 renew 就会更新 lastUpdateTime
      * @return
      */
     private TimerTask getDeltaRetentionTask() {
@@ -1548,10 +1563,8 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
             @Override
             public void run() {
-                // 获取 变更的 租约信息
                 Iterator<RecentlyChangedItem> it = recentlyChangedQueue.iterator();
                 while (it.hasNext()) {
-                    // 代表 在一定时间内 没有将 应缓存的增量数据更新 就将该数据移除掉 如果服务没有续约的话 超过了指定时间 应该就会在这里被移除
                     if (it.next().getLastUpdateTime() <
                             System.currentTimeMillis() - serverConfig.getRetentionTimeInMSInDeltaQueue()) {
                         it.remove();
