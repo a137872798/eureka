@@ -30,12 +30,16 @@ import org.slf4j.LoggerFactory;
  * Helper class to manage lifecycle of a collection of {@link PeerEurekaNode}s.
  *
  * @author Tomasz Bak
+ * 代表 所有的 eurekaServer 同级节点
  */
 @Singleton
 public class PeerEurekaNodes {
 
     private static final Logger logger = LoggerFactory.getLogger(PeerEurekaNodes.class);
 
+    /**
+     * 具备将请求发往所有同级节点的注册中心
+     */
     protected final PeerAwareInstanceRegistry registry;
     protected final EurekaServerConfig serverConfig;
     protected final EurekaClientConfig clientConfig;
@@ -43,20 +47,30 @@ public class PeerEurekaNodes {
     private final ApplicationInfoManager applicationInfoManager;
 
     /**
-     * 不包含 自身  针对 本机既是server又是client的情况
+     * 内部实际维护的 一个 node 列表
      */
     private volatile List<PeerEurekaNode> peerEurekaNodes = Collections.emptyList();
+    /**
+     * 每个 eurekaNode 对应的 serviceUrl
+     */
     private volatile Set<String> peerEurekaNodeUrls = Collections.emptySet();
 
+    /**
+     * 定时线程池
+     */
     private ScheduledExecutorService taskExecutor;
 
+    /**
+     * 每个节点代表一个eurekaServer
+     */
     @Inject
     public PeerEurekaNodes(
-            PeerAwareInstanceRegistry registry,
-            EurekaServerConfig serverConfig,
-            EurekaClientConfig clientConfig,
-            ServerCodecs serverCodecs,
-            ApplicationInfoManager applicationInfoManager) {
+            PeerAwareInstanceRegistry registry, // 代表具备将请求发送到 同级节点的 eurekaServer 对象
+            EurekaServerConfig serverConfig,    // 本机作为 eurekaServer 的配置对象
+            EurekaClientConfig clientConfig,    // 本机作为 eurekaClient 的配置独享
+            ServerCodecs serverCodecs,          // 编解码器
+            ApplicationInfoManager applicationInfoManager  // 实例应用管理对象 在该对象首次被初始化时 内部的静态字段就会被赋值 之后每次调用 getInstance 都是返回同一个对象
+            ) {
         this.registry = registry;
         this.serverConfig = serverConfig;
         this.clientConfig = clientConfig;
@@ -71,7 +85,11 @@ public class PeerEurekaNodes {
     public List<PeerEurekaNode> getPeerEurekaNodes() {
         return peerEurekaNodes;
     }
-    
+
+    /**
+     * 默认值为 -1
+     * @return
+     */
     public int getMinNumberOfAvailablePeers() {
         return serverConfig.getHealthStatusMinNumberOfAvailablePeers();
     }
@@ -95,8 +113,7 @@ public class PeerEurekaNodes {
                 @Override
                 public void run() {
                     try {
-                        // 定期更新节点信息  应该是针对url 不是从配置文件中获取 而是从dataCenter (应该是类似配置中心的概念)
-                        // 或者是 支持热部署 修改配置文件能同步这里的peerNode???
+                        // 从配置文件中获取最新的 serviceUrl 信息设置到 node 中
                         updatePeerEurekaNodes(resolvePeerUrls());
                     } catch (Throwable e) {
                         logger.error("Cannot update the replica Nodes", e);
@@ -119,6 +136,9 @@ public class PeerEurekaNodes {
         }
     }
 
+    /**
+     * 停止更新 node 节点的任务 并清空列表
+     */
     public void shutdown() {
         taskExecutor.shutdown();
         List<PeerEurekaNode> toRemove = this.peerEurekaNodes;
@@ -138,7 +158,7 @@ public class PeerEurekaNodes {
      * 解析其他节点的 url
      */
     protected List<String> resolvePeerUrls() {
-        // 这个应该是本服务代表的 实例信息 InstanceInfo
+        // 这个应该是本机实例信息 InstanceInfo
         InstanceInfo myInfo = applicationInfoManager.getInfo();
         // 根据 region 返回下面所有的 zone  如果找不到 会默认使用 defaultZone 去查找属性值  看来针对region zone 有实际含义的就代表是 AWS
         // 这里默认会返回多个zone 中的第一个

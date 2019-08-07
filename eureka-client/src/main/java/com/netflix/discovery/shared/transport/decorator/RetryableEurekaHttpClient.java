@@ -201,7 +201,7 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
      * @return
      */
     private List<EurekaEndpoint> getHostCandidates() {
-        // 从配置文件上 解析所有可用的 endpoint 对象
+        // 从配置文件上 解析所有可用的 endpoint 对象  这里会打乱 非本 zone 的 endpoint 的顺序
         List<EurekaEndpoint> candidateHosts = clusterResolver.getClusterEndpoints();
         // 只保留交集 该值是可能比 threshold 小的  这个容器中只保留了异常 endpoint 对象
         quarantineSet.retainAll(candidateHosts);

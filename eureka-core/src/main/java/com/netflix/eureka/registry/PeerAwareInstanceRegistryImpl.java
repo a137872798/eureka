@@ -251,14 +251,15 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                     break;
                 }
             }
-            // 获取localRegion 所有apps
+            // 获取localRegion 所有apps  在本机启动时自身既作为 eurekaServer 又作为 eurekaClient 作为client拉取了 远端数据后 将本region 的数据 注册到自身
+            // 这样就保证 每个 新启的client 数据一致
             Applications apps = eurekaClient.getApplications();
             for (Application app : apps.getRegisteredApplications()) {
                 for (InstanceInfo instance : app.getInstances()) {
                     try {
                         // 如果是可注册的
                         if (isRegisterable(instance)) {
-                            // 这代表什么 ??? 代表每个 client 都会将拉取到属于自身 region 的信息 注册到 eurekaServer上???
+                            // 注册到本地 也就是保存到一个map中
                             register(instance, instance.getLeaseInfo().getDurationInSecs(), true);
                             // 代表注册成功了多少
                             count++;
@@ -273,7 +274,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     }
 
     /**
-     * 流量控制
+     * 开启运输
      * @param applicationInfoManager
      * @param count
      */
