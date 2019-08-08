@@ -125,15 +125,20 @@ public class PeerEurekaNode {
                                      HttpReplicationClient replicationClient, EurekaServerConfig config,
                                      int batchSize, long maxBatchingDelayMs,
                                      long retrySleepTimeMs, long serverUnavailableSleepTimeMs) {
+        // 代表能将请求 发送到其他node 的registry 对象
         this.registry = registry;
+        // 目标主机
         this.targetHost = targetHost;
+        // 就是能够发http请求的普通对象
         this.replicationClient = replicationClient;
 
+        // 主机url
         this.serviceUrl = serviceUrl;
         this.config = config;
         this.maxProcessingDelayMs = config.getMaxTimeForReplication();
 
         String batcherName = getBatcherName();
+        // targetHost 作为了一个id 来标识 peer
         ReplicationTaskProcessor taskProcessor = new ReplicationTaskProcessor(targetHost, replicationClient);
         // 创建一个 批量处理任务的对象
         this.batchingDispatcher = TaskDispatchers.createBatchingTaskDispatcher(

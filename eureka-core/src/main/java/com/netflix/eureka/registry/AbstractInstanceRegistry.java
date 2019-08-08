@@ -196,7 +196,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * @throws MalformedURLException
      */
     protected void initRemoteRegionRegistry() throws MalformedURLException {
-        // key 为 region  value 为 registry的 url
+        // key 为 region  value 为 region的 url
         Map<String, String> remoteRegionUrlsWithName = serverConfig.getRemoteRegionUrlsWithName();
         // 代表该eurekaServer 对象设置了 远端同级节点
         if (!remoteRegionUrlsWithName.isEmpty()) {

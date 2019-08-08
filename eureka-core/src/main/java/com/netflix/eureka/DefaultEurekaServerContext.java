@@ -33,16 +33,31 @@ import javax.inject.Singleton;
  * local server such as the registry.
  *
  * @author David Liu
- * 该对象同时 管理多个核心对象的生命周期
+ * eureka上下文对象 在 EurekaBootstrap 启动时 会创建一系列对象并生成该对象来管理他们
  */
 @Singleton
 public class DefaultEurekaServerContext implements EurekaServerContext {
     private static final Logger logger = LoggerFactory.getLogger(DefaultEurekaServerContext.class);
 
+    /**
+     * 本机作为注册中心的配置
+     */
     private final EurekaServerConfig serverConfig;
+    /**
+     * 编解码器
+     */
     private final ServerCodecs serverCodecs;
+    /**
+     * 该对象内部维护一个 nodes 之后对该 registry 发送请求时 会被转发给所有的 node
+     */
     private final PeerAwareInstanceRegistry registry;
+    /**
+     * 通过解析配置文件中本 region 下第一个 zone 对应的 serviceUrl 来生成 nodes
+     */
     private final PeerEurekaNodes peerEurekaNodes;
+    /**
+     * 实例管理对象
+     */
     private final ApplicationInfoManager applicationInfoManager;
 
     @Inject
@@ -62,8 +77,11 @@ public class DefaultEurekaServerContext implements EurekaServerContext {
     @Override
     public void initialize() {
         logger.info("Initializing ...");
+        // 该对象初始化时 启动下面管理的对象
+        // peerEurekaNodes 在启动时 会定期去加载配置文件中的 serviceUrl 信息 并生成 List<Node> 对象
         peerEurekaNodes.start();
         try {
+            // 使用生成的 nodes 对象去初始化 eurekaServer 对象
             registry.init(peerEurekaNodes);
         } catch (Exception e) {
             throw new RuntimeException(e);

@@ -28,7 +28,7 @@ import com.netflix.eureka.resources.ServerCodecs;
 public interface EurekaServerContext {
 
     /**
-     * 注册中心初始化
+     * 对下面管理的组件进行统一初始化
      * @throws Exception
      */
     void initialize() throws Exception;

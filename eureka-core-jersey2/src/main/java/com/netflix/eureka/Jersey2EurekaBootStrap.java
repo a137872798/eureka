@@ -12,7 +12,7 @@ import com.netflix.eureka.resources.ServerCodecs;
  * Jersey2 eureka server bootstrapper
  * @author Matt Nelson
  */
-public class Jersey2EurekaBootStrap extends EurekaBootStrap {
+public class Jersey2Strap extends EurekaBootStrap {
     
     public Jersey2EurekaBootStrap(DiscoveryClient discoveryClient) {
         super(discoveryClient);

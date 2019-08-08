@@ -125,6 +125,7 @@ public class EurekaBootStrap implements ServletContextListener {
             initEurekaServerContext();
 
             ServletContext sc = event.getServletContext();
+            // 将eurekaServerContext 设置到 servletContext 中便于随时能访问到
             sc.setAttribute(EurekaServerContext.class.getName(), serverContext);
         } catch (Throwable e) {
             logger.error("Cannot bootstrap eureka server :", e);
@@ -209,7 +210,7 @@ public class EurekaBootStrap implements ServletContextListener {
             awsBinder = new AwsBinderDelegate(eurekaServerConfig, eurekaClient.getEurekaClientConfig(), registry, applicationInfoManager);
             awsBinder.start();
         } else {
-            // 默认情况
+            // 默认情况  该对象具备将请求转发到下面所有nodes 的能力
             registry = new PeerAwareInstanceRegistryImpl(
                     // 该对象内 维护了 eureka-server 的信息
                     eurekaServerConfig,
@@ -220,6 +221,7 @@ public class EurekaBootStrap implements ServletContextListener {
             );
         }
 
+        // 获取同级节点对象
         PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(
                 registry,
                 eurekaServerConfig,
@@ -228,6 +230,7 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
+        // 生成上下文对象
         serverContext = new DefaultEurekaServerContext(
                 eurekaServerConfig,
                 serverCodecs,
@@ -236,19 +239,32 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
+        // 设置到静态变量中
         EurekaServerContextHolder.initialize(serverContext);
 
+        // 这里会完成上述 组件的初始化工作 比如 定期从配置文件中拉取 node 节点信息
         serverContext.initialize();
         logger.info("Initialized server context");
 
         // Copy registry from neighboring eureka node
+        // 把从 discoveryClient 拉取到的实例信息中属于localRegion 的信息 注册到自身（自身本就作为一个注册中心）谁来做续约???
         int registryCount = registry.syncUp();
+        // 开启注册中心运输 就是将本实例上线 并通知监听器  在本实例没有设置成UP状态时是不能被其他client监测到的 同时开启自身的 续约检测 就是将没有定期续约的剔除
         registry.openForTraffic(applicationInfoManager, registryCount);
 
         // Register all monitoring statistics.
         EurekaMonitors.registerAllStats();
     }
-    
+
+    /**
+     * 生成同级节点对象 针对 eurekaServer 应该是代表往一个注册中心发送的请求 会传播到所有的 eurekaServer 上
+     * @param registry
+     * @param eurekaServerConfig
+     * @param eurekaClientConfig
+     * @param serverCodecs
+     * @param applicationInfoManager
+     * @return
+     */
     protected PeerEurekaNodes getPeerEurekaNodes(PeerAwareInstanceRegistry registry, EurekaServerConfig eurekaServerConfig, EurekaClientConfig eurekaClientConfig, ServerCodecs serverCodecs, ApplicationInfoManager applicationInfoManager) {
         PeerEurekaNodes peerEurekaNodes = new PeerEurekaNodes(
                 registry,
@@ -263,6 +279,7 @@ public class EurekaBootStrap implements ServletContextListener {
 
     /**
      * Handles Eureka cleanup, including shutting down all monitors and yielding all EIPs.
+     * 监听到销毁事件时
      *
      * @see javax.servlet.ServletContextListener#contextDestroyed(javax.servlet.ServletContextEvent)
      */
@@ -273,6 +290,7 @@ public class EurekaBootStrap implements ServletContextListener {
             ServletContext sc = event.getServletContext();
             sc.removeAttribute(EurekaServerContext.class.getName());
 
+            // 销毁上下文对象和环境对象
             destroyEurekaServerContext();
             destroyEurekaEnvironment();
 
