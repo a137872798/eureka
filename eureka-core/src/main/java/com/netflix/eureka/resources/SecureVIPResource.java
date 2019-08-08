@@ -33,7 +33,7 @@ import javax.ws.rs.core.Response;
  * A <em>jersey</em> resource for retrieving all instances with a given secure VIP address.
  *
  * @author Karthik Ranganathan
- *
+ * 基于 https 的 VIP Controller
  */
 @Path("/{version}/svips")
 @Produces({"application/xml", "application/json"})
@@ -48,6 +48,9 @@ public class SecureVIPResource extends AbstractVIPResource {
         this(EurekaServerContextHolder.getInstance().getServerContext());
     }
 
+    /**
+     * 传入 HTTPS 的 vipAddress 这里只是使用的 Key.EntityType 不同
+     */
     @GET
     @Path("{svipAddress}")
     public Response statusUpdate(@PathParam("version") String version,

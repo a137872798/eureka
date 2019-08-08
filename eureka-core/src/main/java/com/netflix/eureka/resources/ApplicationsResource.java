@@ -61,12 +61,21 @@ public class ApplicationsResource {
     private static final String HEADER_GZIP_VALUE = "gzip";
     private static final String HEADER_JSON_VALUE = "json";
 
+    /**
+     * 该对象作为 注册中心的配置
+     */
     private final EurekaServerConfig serverConfig;
+    /**
+     * 注册中心实例对象
+     */
     private final PeerAwareInstanceRegistry registry;
+    /**
+     * 缓存对象
+     */
     private final ResponseCache responseCache;
 
     /**
-     * 使用 @Inject 等价于 Spring @Auto
+     * 使用 @Inject 等价于 Spring @Auto  EurekaServerContext 中各个组件会在初始化时 通过加载配置文件中的配置 去访问 对应的 注册中心拉取数据
      * @param eurekaServer
      */
     @Inject
@@ -89,6 +98,7 @@ public class ApplicationsResource {
      *            the unique application identifier (which is the name) of the
      *            application.
      * @return information about a particular application.
+     * 这个controller 还能滋生其他controller ???  看来是 生成针对某个 App 的 controller 对象 提供了针对该 app 的 crud
      */
     @Path("{appId}")
     public ApplicationResource getApplicationResource(
@@ -112,6 +122,7 @@ public class ApplicationsResource {
      *
      * @return a response containing information about all {@link com.netflix.discovery.shared.Applications}
      *         from the {@link AbstractInstanceRegistry}.
+     *         获取 整个 apps 的数据
      */
     @GET
     public Response getContainers(@PathParam("version") String version,
@@ -119,6 +130,7 @@ public class ApplicationsResource {
                                   @HeaderParam(HEADER_ACCEPT_ENCODING) String acceptEncoding,
                                   @HeaderParam(EurekaAccept.HTTP_X_EUREKA_ACCEPT) String eurekaAccept,
                                   @Context UriInfo uriInfo,
+                                  // 是否有指定 region 要注意每个查询都是可以携带 region 的 这样只会返回 该region 下的 app 信息
                                   @Nullable @QueryParam("regions") String regionsStr) {
 
         boolean isRemoteRegionRequested = null != regionsStr && !regionsStr.isEmpty();

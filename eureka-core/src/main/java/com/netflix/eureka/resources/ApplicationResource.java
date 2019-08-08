@@ -48,13 +48,14 @@ import org.slf4j.LoggerFactory;
  *
  * @author Karthik Ranganathan, Greg Kim
  * 该处理器是用于 注册服务的   @Produces 代表该对象会返回 application/xml 或者 application/json 格式的数据 类似在 controller 上加 @ResponseBody
+ * 该对象不是 自动生成的
  */
 @Produces({"application/xml", "application/json"})
 public class ApplicationResource {
     private static final Logger logger = LoggerFactory.getLogger(ApplicationResource.class);
 
     /**
-     * 应用名  eurekaServer 在启动时 就会设置 应用名
+     * 一个 eurekaClient 可能只能属于一个应用
      */
     private final String appName;
     /**

@@ -25,6 +25,9 @@ public class Key {
         Application, VIP, SVIP
     }
 
+    /**
+     * 在VIPResource 中 作为 vipAddress
+     */
     private final String entityName;
     private final String[] regions;
     private final KeyType requestType;

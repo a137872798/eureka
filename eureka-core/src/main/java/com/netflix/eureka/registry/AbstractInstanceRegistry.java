@@ -714,7 +714,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     public void evict(long additionalLeaseMs) {
         logger.debug("Running the evict task");
 
-        // 不允许租约过期的情况 直接返回   自我保护情况下 返回false
+        // 这里是否允许 未续约数据被 剔除 当未开启自我保护机制时 直接剔除 否则 通过判断 未续约数量 是否达到阈值来判断是server失效还是 client 失效
         if (!isLeaseExpirationEnabled()) {
             logger.debug("DS: lease expiration is currently disabled.");
             return;
@@ -875,6 +875,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      *
      * @return The applications with instances from the passed remote regions as well as local region. The instances
      * from remote regions can be only for certain whitelisted apps as explained above.
+     * 从多个 region 中获取 实例信息 如果 参数为null 代表只从本region 获取实例 否则也尝试从remoteRegion 获取实例
      */
     public Applications getApplicationsFromMultipleRegions(String[] remoteRegions) {
 
@@ -891,7 +892,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         }
         Applications apps = new Applications();
         apps.setVersion(1L);
-        // 遍历 registry 下所有 app
+        // 遍历 registry 下所有 app  registry中都是本region 的 app
         for (Entry<String, Map<String, Lease<InstanceInfo>>> entry : registry.entrySet()) {
             Application app = null;
 

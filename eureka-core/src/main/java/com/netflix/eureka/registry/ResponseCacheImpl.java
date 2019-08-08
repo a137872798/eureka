@@ -73,6 +73,8 @@ import org.slf4j.LoggerFactory;
  *
  * @author Karthik Ranganathan, Greg Kim
  * 针对http 请求的响应缓存对象  像是维护了一个服务列表
+ * 未缓存的数据是 原始数据 也就是 apps  而一级缓存保存的是 加工过的 (通过codec 加工成json or xml) 二级缓存是只读缓存 减小读写缓存的访问压力
+ * 缺点是 会增大 获取到 无效服务实例的概率 配合 重试机制 实现高可用
  */
 public class ResponseCacheImpl implements ResponseCache {
 
@@ -165,7 +167,7 @@ public class ResponseCacheImpl implements ResponseCache {
                         .removalListener(new RemovalListener<Key, Value>() {
                             @Override
                             public void onRemoval(RemovalNotification<Key, Value> notification) {
-                                // 被移除的缓存键
+                                // 被移除的缓存键    为什么要 额外维护一个缓存呢???
                                 Key removedKey = notification.getKey();
                                 // 缓存键中存在 地区信息
                                 if (removedKey.hasRegions()) {
@@ -177,12 +179,22 @@ public class ResponseCacheImpl implements ResponseCache {
                                 }
                             }
                         })
+                        // 这个指的是 当没有从缓存中获取到数据时 调用该方法 生成缓存数据吗
                         .build(new CacheLoader<Key, Value>() {
+                            /**
+                             * 使用缓存键  也就是Key 去生成数据 在不同场景下 会传入不同的 KeyEntitiy 也就是 Applicaiton (获取一般应用)
+                             * VIP (获取vip 应用)
+                             * @param key
+                             * @return
+                             * @throws Exception
+                             */
                             @Override
                             public Value load(Key key) throws Exception {
+                                // 直接输入 vipaddress 获取数据时 是没有region 信息的 也就是默认情况下是没有指定要获取哪个 region的数据的
                                 if (key.hasRegions()) {
                                     // 如果有区域信息 就保存到 regionSpecificKeys 中
                                     Key cloneWithNoRegions = key.cloneWithoutRegions();
+                                    // 这个存起来有什么意义吗
                                     regionSpecificKeys.put(cloneWithNoRegions, key);
                                 }
                                 // 通过 key 生成 value
@@ -398,21 +410,24 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /**
      * Get the payload in both compressed and uncompressed form.
-     * 这里数据会有短暂的延时啊 readOnly 可能还没有与 readWrite 同步
+     * 这里数据会有短暂的延时啊 readOnly 可能还没有与 readWrite 同步 这种情况下 就会去 wr中获取数据并主动设置到 ro 中
      */
     @VisibleForTesting
     Value getValue(final Key key, boolean useReadOnlyCache) {
         Value payload = null;
         try {
             if (useReadOnlyCache) {
+                // 因为 ro 存在 延迟 所以可能获取到错误的服务实例
                 final Value currentPayload = readOnlyCacheMap.get(key);
                 if (currentPayload != null) {
                     payload = currentPayload;
                 } else {
+                    // 从一级缓存中获取 并设置到 二级缓存中  如果 rw 中原来没有数据 就会 调用缓存对象的 build() 方法 生成缓存
                     payload = readWriteCacheMap.get(key);
                     readOnlyCacheMap.put(key, payload);
                 }
             } else {
+                // 直接尝试从一级缓存中获取
                 payload = readWriteCacheMap.get(key);
             }
         } catch (Throwable t) {
@@ -470,21 +485,23 @@ public class ResponseCacheImpl implements ResponseCache {
             String payload;
             // 获取被缓存的对象
             switch (key.getEntityType()) {
-                // 如果是应用对象
+                // 代表需要获取的是 普通的应用实例对象
                 case Application:
                     // 获取 region信息
                     boolean isRemoteRegionRequested = key.hasRegions();
 
-                    // 如果是 针对全部应用的
+                    // 如果是 针对全部应用的  name 针对 VIP SVIP 就是 地址 针对 application 可能就是应用名 然后如果是 特殊的应用名 比如 ALL_APPS
+                    // 就是返回全部应用
                     if (ALL_APPS.equals(key.getName())) {
+                        // 判断是否有指定 region
                         if (isRemoteRegionRequested) {
                             // 启动对应的秒表
                             tracer = serializeAllAppsWithRemoteRegionTimer.start();
-                            // 根据指定的region 获取 application
+                            // 根据指定的region 获取 application  region 可以为 null 就是只返回本region  否则还同时从remoteRegion 中获取数据
                             payload = getPayLoad(key, registry.getApplicationsFromMultipleRegions(key.getRegions()));
                         } else {
                             tracer = serializeAllAppsTimer.start();
-                            // 未指定region情况下 根据 其他条件 判断获取那些 应用
+                            // 未指定region情况下 直接返回 本region 应用  apps 是不能直接被使用的 而要转换成payload才能直接使用
                             payload = getPayLoad(key, registry.getApplications());
                         }
                     // 特殊应用
@@ -507,6 +524,7 @@ public class ResponseCacheImpl implements ResponseCache {
                         payload = getPayLoad(key, registry.getApplication(key.getName()));
                     }
                     break;
+                // 代表需要获取的是 VIP 或 SVIP 数据
                 case VIP:
                 case SVIP:
                     tracer = serializeViptimer.start();
@@ -560,7 +578,7 @@ public class ResponseCacheImpl implements ResponseCache {
                     // 尝试进行分割
                     String[] vipAddresses = vipAddress.split(",");
                     Arrays.sort(vipAddresses);
-                    // 看来有些key 是以 vip 地址作为name 的 这里数量大于0 就代表 这个registry 中存在 vip地址为该key 的 application
+                    // 针对传入 VIP SVIP 类型 的 key keyName 就是 vipAddress 这里是找到匹配的app 组合成apps并返回
                     if (Arrays.binarySearch(vipAddresses, key.getName()) >= 0) {
                         if (null == appToAdd) {
                             // 只要application 下有一个 instance 存在 该vip 地址就设置进去

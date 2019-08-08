@@ -48,6 +48,7 @@ import org.slf4j.LoggerFactory;
  * overhead.
  *
  * @author Tomasz Bak
+ * 这个就是 eureka 的 服务器对象 可以发送请求到 携带 @Path 的类上
  */
 public class SimpleEurekaHttpServer {
 

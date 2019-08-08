@@ -281,12 +281,13 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     public void openForTraffic(ApplicationInfoManager applicationInfoManager, int count) {
         // Renewals happen every 30 seconds and for a minute it should be a factor of 2.
         this.expectedNumberOfClientsSendingRenews = count;
-        // 更新续约阈值
+        // 更新续约阈值 配合自我保护机制 判断 是否要对未续约的服务实例剔除
         updateRenewsPerMinThreshold();
         logger.info("Got {} instances from neighboring DS node", count);
         logger.info("Renew threshold is: {}", numberOfRenewsPerMinThreshold);
         this.startupTime = System.currentTimeMillis();
         if (count > 0) {
+            // 代表初始化完成 也就是允许访问了
             this.peerInstancesTransferEmptyOnStartup = false;
         }
         DataCenterInfo.Name selfName = applicationInfoManager.getInfo().getDataCenterInfo().getName();
@@ -381,13 +382,16 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      */
     @Override
     public boolean shouldAllowAccess(boolean remoteRegionRequired) {
-        // 默认为false
+        // 默认为true
         if (this.peerInstancesTransferEmptyOnStartup) {
+            // 如果当前时间 小于启动时间 就返回false
             if (!(System.currentTimeMillis() > this.startupTime + serverConfig.getWaitTimeInMsWhenSyncEmpty())) {
                 return false;
             }
         }
+        // 是否允许访问远端 region
         if (remoteRegionRequired) {
+            // 允许的情况下 只要有一个 远端没有拉取完成就返回 禁止访问
             for (RemoteRegionRegistry remoteRegionRegistry : this.regionNameVSRemoteRegistry.values()) {
                 if (!remoteRegionRegistry.isReadyForServingData()) {
                     return false;

@@ -33,7 +33,8 @@ import javax.ws.rs.core.Response;
  * A <em>jersey</em> resource for retrieving all instances with a given VIP address.
  *
  * @author Karthik Ranganathan
- *
+ * 作为 VIP 的Controller  可能设置了 @Path 的 对象会自动被初始化
+ * 看来 eureka 有2套启动机制 一套是 嵌入在 tomcat 中 通过监听器的方式来 初始化 一种是 利用@Singleton 和 @Inject 来初始化对象
  */
 @Path("/{version}/vips")
 @Produces({"application/xml", "application/json"})
@@ -48,6 +49,14 @@ public class VIPResource extends AbstractVIPResource {
         this(EurekaServerContextHolder.getInstance().getServerContext());
     }
 
+    /**
+     * 填入vip 地址 获取 对应的服务数据
+     * @param version
+     * @param vipAddress
+     * @param acceptHeader
+     * @param eurekaAccept
+     * @return
+     */
     @GET
     @Path("{vipAddress}")
     public Response statusUpdate(@PathParam("version") String version,
@@ -55,6 +64,7 @@ public class VIPResource extends AbstractVIPResource {
                                  @HeaderParam("Accept") final String acceptHeader,
                                  @HeaderParam(EurekaAccept.HTTP_X_EUREKA_ACCEPT) String eurekaAccept) {
         return getVipResponse(version, vipAddress, acceptHeader,
+                                                        // 代表是 VIP 类型
                 EurekaAccept.fromString(eurekaAccept), Key.EntityType.VIP);
     }
 
