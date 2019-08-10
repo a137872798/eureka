@@ -144,7 +144,7 @@ public class ApplicationsResource {
         }
 
         // Check if the server allows the access to the registry. The server can
-        // restrict access if it is not
+        // restrict access if it is not1/
         // ready to serve traffic depending on various reasons.
         if (!registry.shouldAllowAccess(isRemoteRegionRequested)) {
             return Response.status(Status.FORBIDDEN).build();
@@ -202,6 +202,7 @@ public class ApplicationsResource {
      * @param uriInfo  the {@link java.net.URI} information of the request made.
      * @return response containing the delta information of the
      *         {@link AbstractInstanceRegistry}.
+     *          获取所有增加数据
      */
     @Path("delta")
     @GET
@@ -216,6 +217,7 @@ public class ApplicationsResource {
 
         // If the delta flag is disabled in discovery or if the lease expiration
         // has been disabled, redirect clients to get all instances
+        // 首先要允许开启增量数据
         if ((serverConfig.shouldDisableDelta()) || (!registry.shouldAllowAccess(isRemoteRegionRequested))) {
             return Response.status(Status.FORBIDDEN).build();
         }

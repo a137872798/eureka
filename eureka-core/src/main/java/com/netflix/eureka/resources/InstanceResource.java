@@ -47,6 +47,7 @@ import org.slf4j.LoggerFactory;
  * A <em>jersey</em> resource that handles operations for a particular instance.
  *
  * @author Karthik Ranganathan, Greg Kim
+ * instanceInfo 级别的 controller
  *
  */
 @Produces({"application/xml", "application/json"})
@@ -101,10 +102,13 @@ public class InstanceResource {
      *            last timestamp when this instance information was updated.
      * @return response indicating whether the operation was a success or
      *         failure.
+     *         针对instanceInfo 进行续约 每个 eurekaClient 就是一个实例 只不过 他有归属的 app
      */
     @PUT
     public Response renewLease(
+            // 本次续约请求是否是从其他节点传来
             @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication,
+            // overrideStatus 到底是干嘛的  只知道这个状态是不会立即生效的 而是在一定延时后 在下次续约中 使用
             @QueryParam("overriddenstatus") String overriddenStatus,
             @QueryParam("status") String status,
             @QueryParam("lastDirtyTimestamp") String lastDirtyTimestamp) {
@@ -118,6 +122,7 @@ public class InstanceResource {
         }
         // Check if we need to sync based on dirty time stamp, the client
         // instance might have changed some value
+        // 续约成功的情况下 设置 res 对象   shouldSyncWhenTimestampDiffers 代表是否要同步 等待 处理完成
         Response response;
         if (lastDirtyTimestamp != null && serverConfig.shouldSyncWhenTimestampDiffers()) {
             response = this.validateDirtyTimestamp(Long.valueOf(lastDirtyTimestamp), isFromReplicaNode);
@@ -256,6 +261,7 @@ public class InstanceResource {
             for (Entry<String, List<String>> entry : entrySet) {
                 metadataMap.put(entry.getKey(), entry.getValue().get(0));
             }
+            // 这里会替换原来维护的instanceInfo
             registry.register(instanceInfo, false);
             return Response.ok().build();
         } catch (Throwable e) {
@@ -297,6 +303,7 @@ public class InstanceResource {
 
     private Response validateDirtyTimestamp(Long lastDirtyTimestamp,
                                             boolean isReplication) {
+        // 获取 应用实例对象
         InstanceInfo appInfo = registry.getInstanceByAppAndId(app.getName(), id, false);
         if (appInfo != null) {
             if ((lastDirtyTimestamp != null) && (!lastDirtyTimestamp.equals(appInfo.getLastDirtyTimestamp()))) {
@@ -308,6 +315,7 @@ public class InstanceResource {
                                     + " ReplicationInstance id : {},Registry : {} Incoming: {} Replication: {}",
                             args);
                     return Response.status(Status.NOT_FOUND).build();
+                    // 代表本次续约的 对象 比 现在存在的数据旧
                 } else if (appInfo.getLastDirtyTimestamp() > lastDirtyTimestamp) {
                     // In the case of replication, send the current instance info in the registry for the
                     // replicating node to sync itself with this one.

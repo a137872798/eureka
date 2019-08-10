@@ -465,7 +465,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         if (gMap != null) {
             leaseToRenew = gMap.get(id);
         }
-        // 没有实例信息
+        // 没有实例信息 返回false 代表本次续约失败 这样配合一些具备重试功能的组件 就能实现高可用
         if (leaseToRenew == null) {
             RENEW_NOT_FOUND.increment(isReplication);
             logger.warn("DS: Registry: lease doesn't exist, registering resource: {} - {}", appName, id);
@@ -474,7 +474,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             InstanceInfo instanceInfo = leaseToRenew.getHolder();
             if (instanceInfo != null) {
                 // touchASGCache(instanceInfo.getASGName());
-                // 应用规则对象 修改 status  每次续约为什么要修改status???
+                // 这是续约的 条件吗???
                 InstanceStatus overriddenInstanceStatus = this.getOverriddenInstanceStatus(
                         instanceInfo, leaseToRenew, isReplication);
                 // 如果是 UNKNOWN 就代表没有找到
@@ -598,6 +598,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 if (info == null) {
                     logger.error("Found Lease without a holder for instance id {}", id);
                 }
+                // 状态发生变更后 要判断是否是 UP 非 UP 情况要进行下线
                 if ((info != null) && !(info.getStatus().equals(newStatus))) {
                     // Mark service as UP if needed
                     if (InstanceStatus.UP.equals(newStatus)) {

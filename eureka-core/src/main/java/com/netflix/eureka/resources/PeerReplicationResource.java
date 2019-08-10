@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory;
  * @GET @POST @DELETE  对应 各种请求动作
  * @Produces 标注返回的MIME 媒体类型
  * @PathParam @QueryParam 这些 都对应到 spring-mvc 中各个从请求路径 or 请求头解析参数的方法
+ * 针对 本 eurekaServer 的 所有同级节点 同时发送消息
  */
 @Path("/{version}/peerreplication")
 @Produces({"application/xml", "application/json"})
@@ -99,8 +100,15 @@ public class PeerReplicationResource {
         }
     }
 
+    /**
+     * 发送请求 并返回响应信息
+     * @param instanceInfo
+     * @return
+     */
     private ReplicationInstanceResponse dispatch(ReplicationInstance instanceInfo) {
+        // 生成控制器对象
         ApplicationResource applicationResource = createApplicationResource(instanceInfo);
+        // 生成 instaceInfo 的 控制器对象
         InstanceResource resource = createInstanceResource(instanceInfo, applicationResource);
 
         String lastDirtyTimestamp = toString(instanceInfo.getLastDirtyTimestamp());
@@ -108,6 +116,7 @@ public class PeerReplicationResource {
         String instanceStatus = toString(instanceInfo.getStatus());
 
         Builder singleResponseBuilder = new Builder();
+        // 批量 分发请求
         switch (instanceInfo.getAction()) {
             case Register:
                 singleResponseBuilder = handleRegister(instanceInfo, applicationResource);

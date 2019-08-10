@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
  * A <em>jersey</em> resource that gets information about a particular instance.
  *
  * @author Karthik Ranganathan, Greg Kim
+ * 多实例的 控制器
  *
  */
 @Produces({"application/xml", "application/json"})
