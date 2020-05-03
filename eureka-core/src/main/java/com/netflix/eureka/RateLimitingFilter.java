@@ -130,14 +130,17 @@ public class RateLimitingFilter implements Filter {
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
+        // 从请求对象中剥离出需要 限流的请求
         Target target = getTarget(request);
         if (target == Target.Other) {
+            // other 不处理
             chain.doFilter(request, response);
             return;
         }
 
         HttpServletRequest httpRequest = (HttpServletRequest) request;
 
+        // 是否生成了令牌
         if (isRateLimited(httpRequest, target)) {
             incrementStats(target);
             if (serverConfig.isRateLimiterEnabled()) {
@@ -154,6 +157,7 @@ public class RateLimitingFilter implements Filter {
             HttpServletRequest httpRequest = (HttpServletRequest) request;
             String pathInfo = httpRequest.getRequestURI();
 
+            // 断定拉取的类型
             if ("GET".equals(httpRequest.getMethod()) && pathInfo != null) {
                 Matcher matcher = TARGET_RE.matcher(pathInfo);
                 if (matcher.matches()) {
