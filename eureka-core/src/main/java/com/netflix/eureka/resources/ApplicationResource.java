@@ -126,6 +126,7 @@ public class ApplicationResource {
         );
 
         String payLoad = responseCache.get(cacheKey);
+        CurrentRequestVersion.remove();
 
         if (payLoad != null) {
             logger.debug("Found: {}", appName);

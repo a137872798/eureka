@@ -96,6 +96,7 @@ abstract class AbstractVIPResource {
 
         // 首先尝试从缓存中获取数据 这里会先从二级缓存中获取 (同时二级缓存会 在定时任务的处理下 同步到 一级缓存)
         String payLoad = responseCache.get(cacheKey);
+        CurrentRequestVersion.remove();
 
         if (payLoad != null) {
             logger.debug("Found: {}", entityName);

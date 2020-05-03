@@ -105,7 +105,11 @@ public class ApplicationsResource {
             @PathParam("version") String version,
             @PathParam("appId") String appId) {
         CurrentRequestVersion.set(Version.toEnum(version));
-        return new ApplicationResource(appId, serverConfig, registry);
+        try {
+            return new ApplicationResource(appId, serverConfig, registry);
+        } finally {
+            CurrentRequestVersion.remove();
+        }
     }
 
     /**
@@ -172,6 +176,7 @@ public class ApplicationsResource {
             response = Response.ok(responseCache.get(cacheKey))
                     .build();
         }
+        CurrentRequestVersion.remove();
         return response;
     }
 
@@ -244,15 +249,18 @@ public class ApplicationsResource {
                 keyType, CurrentRequestVersion.get(), EurekaAccept.fromString(eurekaAccept), regions
         );
 
-        if (acceptEncoding != null
-                && acceptEncoding.contains(HEADER_GZIP_VALUE)) {
-            return Response.ok(responseCache.getGZIP(cacheKey))
+        final Response response;
+
+        if (acceptEncoding != null && acceptEncoding.contains(HEADER_GZIP_VALUE)) {
+             response = Response.ok(responseCache.getGZIP(cacheKey))
                     .header(HEADER_CONTENT_ENCODING, HEADER_GZIP_VALUE)
                     .header(HEADER_CONTENT_TYPE, returnMediaType)
                     .build();
         } else {
-            return Response.ok(responseCache.get(cacheKey))
-                    .build();
+            response = Response.ok(responseCache.get(cacheKey)).build();
         }
+
+        CurrentRequestVersion.remove();
+        return response;
     }
 }

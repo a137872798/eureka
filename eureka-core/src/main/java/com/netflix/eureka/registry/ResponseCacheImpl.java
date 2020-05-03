@@ -246,6 +246,8 @@ public class ResponseCacheImpl implements ResponseCache {
                         }
                     } catch (Throwable th) {
                         logger.error("Error while updating the client cache from response cache for key {}", key.toStringCompact(), th);
+                    } finally {
+                        CurrentRequestVersion.remove();
                     }
                 }
             }
@@ -298,6 +300,12 @@ public class ResponseCacheImpl implements ResponseCache {
             return null;
         }
         return payload.getGzipped();
+    }
+
+    @Override
+    public void stop() {
+        timer.cancel();
+        Monitors.unregisterObject(this);
     }
 
     /**

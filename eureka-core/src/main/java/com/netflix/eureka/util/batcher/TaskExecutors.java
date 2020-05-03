@@ -1,7 +1,9 @@
 package com.netflix.eureka.util.batcher;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,19 +26,14 @@ import static com.netflix.eureka.Names.METRIC_REPLICATION_PREFIX;
  * provided with a task(s).
  *
  * @author Tomasz Bak
- * 生成处理任务的线程池对象
  */
 class TaskExecutors<ID, T> {
 
     private static final Logger logger = LoggerFactory.getLogger(TaskExecutors.class);
 
-    /**
-     * 线程池 是否停止
-     */
+    private static final Map<String, TaskExecutorMetrics> registeredMonitors = new HashMap<>();
+
     private final AtomicBoolean isShutdown;
-    /**
-     * 工作线程 应该是从 AcceptorExecutor 中拉取任务
-     */
     private final List<Thread> workerThreads;
 
     TaskExecutors(WorkerRunnableFactory<ID, T> workerRunnableFactory, int workerCount, AtomicBoolean isShutdown) {
@@ -45,12 +42,10 @@ class TaskExecutors<ID, T> {
 
         ThreadGroup threadGroup = new ThreadGroup("eurekaTaskExecutors");
         for (int i = 0; i < workerCount; i++) {
-            // 创建对应数量的 runnable
             WorkerRunnable<ID, T> runnable = workerRunnableFactory.create(i);
             Thread workerThread = new Thread(threadGroup, runnable, runnable.getWorkerName());
             workerThreads.add(workerThread);
             workerThread.setDaemon(true);
-            // 同时启动多个线程
             workerThread.start();
         }
     }
@@ -60,31 +55,18 @@ class TaskExecutors<ID, T> {
             for (Thread workerThread : workerThreads) {
                 workerThread.interrupt();
             }
+            registeredMonitors.forEach(Monitors::unregisterObject);
         }
     }
 
-    /**
-     * 获取单线程执行器
-     * @param name
-     * @param workerCount
-     * @param processor
-     * @param acceptorExecutor
-     * @param <ID>
-     * @param <T>
-     * @return
-     */
     static <ID, T> TaskExecutors<ID, T> singleItemExecutors(final String name,
                                                             int workerCount,
                                                             final TaskProcessor<T> processor,
                                                             final AcceptorExecutor<ID, T> acceptorExecutor) {
         final AtomicBoolean isShutdown = new AtomicBoolean();
         final TaskExecutorMetrics metrics = new TaskExecutorMetrics(name);
-        return new TaskExecutors<>(new WorkerRunnableFactory<ID, T>() {
-            @Override
-            public WorkerRunnable<ID, T> create(int idx) {
-                return new SingleTaskWorkerRunnable<>("TaskNonBatchingWorker-" + name + '-' + idx, isShutdown, metrics, processor, acceptorExecutor);
-            }
-        }, workerCount, isShutdown);
+        registeredMonitors.put(name, metrics);
+        return new TaskExecutors<>(idx -> new SingleTaskWorkerRunnable<>("TaskNonBatchingWorker-" + name + '-' + idx, isShutdown, metrics, processor, acceptorExecutor), workerCount, isShutdown);
     }
 
     static <ID, T> TaskExecutors<ID, T> batchExecutors(final String name,
@@ -93,17 +75,10 @@ class TaskExecutors<ID, T> {
                                                        final AcceptorExecutor<ID, T> acceptorExecutor) {
         final AtomicBoolean isShutdown = new AtomicBoolean();
         final TaskExecutorMetrics metrics = new TaskExecutorMetrics(name);
-        return new TaskExecutors<>(new WorkerRunnableFactory<ID, T>() {
-            @Override
-            public WorkerRunnable<ID, T> create(int idx) {
-                return new BatchWorkerRunnable<>("TaskBatchingWorker-" +name + '-' + idx, isShutdown, metrics, processor, acceptorExecutor);
-            }
-        }, workerCount, isShutdown);
+        registeredMonitors.put(name, metrics);
+        return new TaskExecutors<>(idx -> new BatchWorkerRunnable<>("TaskBatchingWorker-" + name + '-' + idx, isShutdown, metrics, processor, acceptorExecutor), workerCount, isShutdown);
     }
 
-    /**
-     * 任务线程池 测量工具
-     */
     static class TaskExecutorMetrics {
 
         @Monitor(name = METRIC_REPLICATION_PREFIX + "numberOfSuccessfulExecutions", description = "Number of successful task executions", type = DataSourceType.COUNTER)
@@ -137,11 +112,6 @@ class TaskExecutors<ID, T> {
             }
         }
 
-        /**
-         * 统计每次结果
-         * @param result
-         * @param count
-         */
         void registerTaskResult(ProcessingResult result, int count) {
             switch (result) {
                 case Success:
@@ -171,40 +141,15 @@ class TaskExecutors<ID, T> {
         }
     }
 
-    /**
-     * 具备创建 可执行 Runnbale 对象的能力
-     * @param <ID>
-     * @param <T>
-     */
     interface WorkerRunnableFactory<ID, T> {
         WorkerRunnable<ID, T> create(int idx);
     }
 
-    /**
-     * 该对象 实现了 Runnbale 接口
-     * @param <ID>
-     * @param <T>
-     */
     abstract static class WorkerRunnable<ID, T> implements Runnable {
-        /**
-         * worker 名称
-         */
         final String workerName;
-        /**
-         * 是否停止
-         */
         final AtomicBoolean isShutdown;
-        /**
-         * 测量对象 先忽视
-         */
         final TaskExecutorMetrics metrics;
-        /**
-         * 任务处理器
-         */
         final TaskProcessor<T> processor;
-        /**
-         * 接受请求的线程
-         */
         final AcceptorExecutor<ID, T> taskDispatcher;
 
         WorkerRunnable(String workerName,
@@ -224,11 +169,6 @@ class TaskExecutors<ID, T> {
         }
     }
 
-    /**
-     * 批量处理任务对象
-     * @param <ID>
-     * @param <T>
-     */
     static class BatchWorkerRunnable<ID, T> extends WorkerRunnable<ID, T> {
 
         BatchWorkerRunnable(String workerName,
@@ -243,20 +183,16 @@ class TaskExecutors<ID, T> {
         public void run() {
             try {
                 while (!isShutdown.get()) {
-                    // 从容器中获取待执行任务
                     List<TaskHolder<ID, T>> holders = getWork();
                     metrics.registerExpiryTimes(holders);
 
-                    // 获取要处理的任务
                     List<T> tasks = getTasksOf(holders);
-                    // 处理批量任务
                     ProcessingResult result = processor.process(tasks);
                     switch (result) {
                         case Success:
                             break;
                         case Congestion:
                         case TransientError:
-                            // 尝试 重新执行任务
                             taskDispatcher.reprocess(holders, result);
                             break;
                         case PermanentError:
@@ -273,11 +209,9 @@ class TaskExecutors<ID, T> {
         }
 
         private List<TaskHolder<ID, T>> getWork() throws InterruptedException {
-            // 调用requestWorkItems 时会分配锁 这样 Acceptor 就会尝试将任务 转入到 任务队列中 第一次不一定会有结果 数据可能还没来得及转移进来
             BlockingQueue<List<TaskHolder<ID, T>>> workQueue = taskDispatcher.requestWorkItems();
             List<TaskHolder<ID, T>> result;
             do {
-                // 首次先阻塞一秒 保证任务都会加载进来
                 result = workQueue.poll(1, TimeUnit.SECONDS);
             } while (!isShutdown.get() && result == null);
             return (result == null) ? new ArrayList<>() : result;
@@ -292,11 +226,6 @@ class TaskExecutors<ID, T> {
         }
     }
 
-    /**
-     * 单任务处理器  逻辑同上
-     * @param <ID>
-     * @param <T>
-     */
     static class SingleTaskWorkerRunnable<ID, T> extends WorkerRunnable<ID, T> {
 
         SingleTaskWorkerRunnable(String workerName,

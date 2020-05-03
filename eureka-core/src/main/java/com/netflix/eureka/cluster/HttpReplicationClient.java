@@ -23,5 +23,4 @@ public interface HttpReplicationClient extends EurekaHttpClient {
      * @return
      */
     EurekaHttpResponse<ReplicationListResponse> submitBatchUpdates(ReplicationList replicationList);
-
 }

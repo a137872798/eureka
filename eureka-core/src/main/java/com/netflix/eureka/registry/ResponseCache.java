@@ -52,4 +52,10 @@ public interface ResponseCache {
      * 获取被保存的 压缩数据
      */
     byte[] getGZIP(Key key);
+
+    /**
+     * Performs a shutdown of this cache by stopping internal threads and unregistering
+     * Servo monitors.
+     */
+    void stop();
 }
