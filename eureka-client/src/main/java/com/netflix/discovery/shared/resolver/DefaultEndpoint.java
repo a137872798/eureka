@@ -23,6 +23,7 @@ import java.util.List;
 
 /**
  * 默认的端点对象 携带 端口 ip 等信息
+ * 该对象和 instanceInfo 有什么关系  为什么需要这2种抽象层
  * @author Tomasz Bak
  */
 public class DefaultEndpoint implements EurekaEndpoint {

@@ -33,6 +33,10 @@ public class ConfigClusterResolver implements ClusterResolver<AwsEndpoint> {
         return clientConfig.getRegion();
     }
 
+    /**
+     * 获取本集群下所有可用端点的地址
+     * @return
+     */
     @Override
     public List<AwsEndpoint> getClusterEndpoints() {
         if (clientConfig.shouldUseDnsForFetchingServiceUrls()) {
@@ -47,6 +51,10 @@ public class ConfigClusterResolver implements ClusterResolver<AwsEndpoint> {
         }
     }
 
+    /**
+     * 基于DNS 获取端点地址
+     * @return
+     */
     private List<AwsEndpoint> getClusterEndpointsFromDns() {
         String discoveryDnsName = getDNSName();
         int port = Integer.parseInt(clientConfig.getEurekaServerPort());
@@ -75,14 +83,13 @@ public class ConfigClusterResolver implements ClusterResolver<AwsEndpoint> {
      * @return
      */
     private List<AwsEndpoint> getClusterEndpointsFromConfig() {
-        // region 默认会 返回 us-east-1 如果 没有设置zone 会返回 defaultZone 的值
+        // region 默认会 返回 us-east-1 如果 没有设置zone 会返回 "defaultZone"
         String[] availZones = clientConfig.getAvailabilityZones(clientConfig.getRegion());
         // 默认返回第一个zone
         String myZone = InstanceInfo.getZone(availZones, myInstanceInfo);
 
-        // 从配置中获取 serviceUrl   key为zone  value 为一组 serviceUrl
         Map<String, List<String>> serviceUrls = EndpointUtils
-                // shouldPreferSameZoneEureka 使用优先使用同一 zone
+                // shouldPreferSameZoneEureka 代表优先使用同一zone 这样能够尽可能提升性能
                 .getServiceUrlsMapFromConfig(clientConfig, myZone, clientConfig.shouldPreferSameZoneEureka());
 
         // 每个 serviceUrl 就可以抽象成 一个 endpoint 对象

@@ -25,6 +25,7 @@ import com.netflix.appinfo.InstanceInfo;
  * @author Karthik Ranganathan, Greg Kim.
  * @param <T> for backward compatibility
  *           代表具备 发现服务功能的接口
+ *           这个接口应该在client 和 server 端都有实现吧
  */
 public interface LookupService<T> {
 
@@ -35,7 +36,7 @@ public interface LookupService<T> {
      * @param appName
      * @return a {@link Application} or null if we couldn't locate any app of
      *         the requested appName
-     *         从所有注册在容器中的应用中 获取指定应用 这里的Application 有可能通过装饰器模式 内部维护一个 list吗???
+     *         根据应用名找到应用对象  （该对象内部包含能提供该功能的所有实例 有点类似与 service 和 node 的关系）
      */
     Application getApplication(String appName);
 
@@ -44,7 +45,7 @@ public interface LookupService<T> {
      * all currently registered {@link Application}s.
      *
      * @return {@link Applications}
-     *          获取所有 注册在容器中的应用
+     *          获取注册中心当前所有实例 (各种service/application)
      */
     Applications getApplications();
 
@@ -56,7 +57,9 @@ public interface LookupService<T> {
      * @param id
      * @return {@link List} of {@link InstanceInfo}s or
      *         {@link java.util.Collections#emptyList()}
-     *         根据 id 直接获取到实例列表 一个实例信息 有可能对应 多个 Application
+     *         通过id 定位到实例信息
+     *         这里会返回list的原因是 每个instanceInfo 虽然id 相同 但是它们内部的 application 属性可能不同
+     *         这也意味着该实例本身提供多个服务
      */
     List<InstanceInfo> getInstancesById(String id);
 
@@ -85,8 +88,8 @@ public interface LookupService<T> {
      *         host name of the next server in line to process the request based
      *         on the round-robin algorithm.
      * @throws java.lang.RuntimeException if the virtualHostname does not exist
-     *          获取下一个注册中心实例 因为每个注册中心也是作为服务注册到其他注册中心的 这里应该是从当前维护的全部服务中找寻到下个注册中心 并从下个注册中心找到对应的服务实例
-     *          (或者 就是返回关于下个注册中心的实例信息)
+     *          实例信息 代表的不仅仅是能够提供服务的实例 也代表着 集群中其他含义的节点  比如 eureka-client eureka-server
+     *          这里是从某个虚拟地址找到下一个可以注册服务实例的 eureka-server
      */
     InstanceInfo getNextServerFromEureka(String virtualHostname, boolean secure);
 }

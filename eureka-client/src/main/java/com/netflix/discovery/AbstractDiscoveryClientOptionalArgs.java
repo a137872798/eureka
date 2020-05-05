@@ -20,24 +20,44 @@ import com.netflix.eventbus.spi.EventBus;
 
 /**
  * <T> The type for client supplied filters (supports jersey1 and jersey2)
+ * 该对象携带了一些额外的参数
  */
 public abstract class AbstractDiscoveryClientOptionalArgs<T> {
     Provider<HealthCheckCallback> healthCheckCallbackProvider;
 
+    /**
+     * 该对象负责检查当前节点是否健康
+     */
     Provider<HealthCheckHandler> healthCheckHandlerProvider;
 
     PreRegistrationHandler preRegistrationHandler;
 
+    /**
+     * 需要被设置的一组过滤器
+     */
     Collection<T> additionalFilters;
 
+    /**
+     * 该对象内部维护了 jerseyClient  负责与 eureka-server 交互
+     */
     EurekaJerseyClient eurekaJerseyClient;
-    
+
+    /**
+     * 该对象可以根据endpoint的url构建EurekaHttpClient    这2个client在 功能上不同  一个负责管理内部真正通信用的client 一个负责使用该client发送请求
+     */
     TransportClientFactory transportClientFactory;
-    
+
+    /**
+     * 该对象提供特殊配置 生成 TransportClientFactory
+     */
     TransportClientFactories transportClientFactories;
 
+    /**
+     * 监听器容器
+     */
     private Set<EurekaEventListener> eventListeners;
 
+    // https 相关的 先忽略
     private Optional<SSLContext> sslContext = Optional.empty();
 
     private Optional<HostnameVerifier> hostnameVerifier = Optional.empty();
@@ -49,7 +69,11 @@ public abstract class AbstractDiscoveryClientOptionalArgs<T> {
         }
         eventListeners.addAll(listeners);
     }
-    
+
+    /**
+     * 这里注入了一个事件总线对象 好像就是可以收集平台 中所有触发的事件???
+     * @param eventBus
+     */
     @Inject(optional = true)
     public void setEventBus(final EventBus eventBus) {
         if (eventListeners == null) {

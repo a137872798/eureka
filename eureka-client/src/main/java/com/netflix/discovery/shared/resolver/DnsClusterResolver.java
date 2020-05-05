@@ -45,6 +45,7 @@ public class DnsClusterResolver implements ClusterResolver<EurekaEndpoint> {
      */
     public DnsClusterResolver(DnsService dnsService, String region, String rootClusterDNS, int port, boolean isSecure, String relativeUri) {
         this.region = region;
+        // 通过dns 找到某组地址 并转换成 endpoint
         List<String> addresses = dnsService.resolveARecord(rootClusterDNS);
         if (addresses == null) {
             this.eurekaEndpoints = Collections.<EurekaEndpoint>singletonList(new DefaultEndpoint(rootClusterDNS, port, isSecure, relativeUri));

@@ -59,7 +59,7 @@ import com.thoughtworks.xstream.annotations.XStreamImplicit;
  *
  * @author Karthik Ranganathan
  *
- *      Application 的 集合
+ *      可以说 service == application   那么 注册中心当前能提供的所有service的信息集合 就对应applications
  */
 @Serializer("com.netflix.discovery.converters.EntityBodyConverter")
 @XStreamAlias("applications")
@@ -98,12 +98,19 @@ public class Applications {
     private String appsHashCode;
 
     private Long versionDelta;
+
+    /**
+     * 内部包含的一组服务
+     */
     @XStreamImplicit
     private final AbstractQueue<Application> applications;
     /**
      * 该组 apps 中 appName 与 app 的键值对
      */
     private final Map<String, Application> appNameApplicationMap;
+    /**
+     * 这里为 instances 赋予了VIP的特性   key 应该是某个 application的标识 比如 appName
+     */
     private final Map<String, VipIndexSupport> virtualHostNameAppMap;
     private final Map<String, VipIndexSupport> secureVirtualHostNameAppMap;
 
@@ -124,9 +131,7 @@ public class Applications {
     public Applications(@JsonProperty("appsHashCode") String appsHashCode,
             @JsonProperty("versionDelta") Long versionDelta,
             @JsonProperty("application") List<Application> registeredApplications) {
-        //这里为什么要使用并发队列来维护 当前能获取的所有应用  应该是有多个时机 会修改该列表 该队列是通过 自旋+CAS 也就是乐观锁 实现 添加元素的  适合于
-        //竞争不激烈 并且 对可见性要求高的场景 copyOnWrite数组 允许读取到过期数据那么 如果某一时刻 读取到 过期数据 且进行缓存 那么在下次更新缓存列表前 都会访问该失效服务 所以
-        //不能使用基于 copyOnWrite数组数组的 实现
+
         this.applications = new ConcurrentLinkedQueue<Application>();
         this.appsHashCode = appsHashCode;
         this.appNameApplicationMap = new ConcurrentHashMap<String, Application>();

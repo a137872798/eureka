@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim
- * 记录服务实例信息
+ * 代表集群中的最小单位 也就是节点
  */
 @ProvidedBy(EurekaConfigBasedInstanceInfoProvider.class)
 @Serializer("com.netflix.discovery.converters.EntityBodyConverter")
@@ -106,14 +106,12 @@ public class InstanceInfo {
      * 使用的默认安全端口 7002
      */
     public static final int DEFAULT_SECURE_PORT = 7002;
-    /**
-     * 默认的 城市 id 为 US   因为 eureka 是实现 AP 的 注册中心 所以核心是 分区可用性 按区域来进行划分的
-     */
+
     public static final int DEFAULT_COUNTRY_ID = 1; // US
 
     // The (fixed) instanceId for this instanceInfo. This should be unique within the scope of the appName.
     /**
-     * 该实例的唯一id
+     * 该实例的唯一id   应该是app范围内唯一
      */
     private volatile String instanceId;
 
@@ -121,14 +119,12 @@ public class InstanceInfo {
      * 代表该服务实例属于哪个应用
      */
     private volatile String appName;
-    /**
-     * 代表 该字段 不会被InstanceInfoConverter 影响???
-     */
+
     @Auto
     private volatile String appGroupName;
 
     /**
-     * 该服务的ip地址
+     * 该实例的ip地址
      */
     private volatile String ipAddr;
 
@@ -169,12 +165,21 @@ public class InstanceInfo {
     private volatile int countryId = DEFAULT_COUNTRY_ID; // Defaults to US
     private volatile boolean isSecurePortEnabled = false;
     private volatile boolean isUnsecurePortEnabled = true;
+    /**
+     * 该实例属于哪个数据中心
+     */
     private volatile DataCenterInfo dataCenterInfo;
     private volatile String hostName;
+    /**
+     * 当前实例属于可用状态还是不可用
+     */
     private volatile InstanceStatus status = InstanceStatus.UP;
     private volatile InstanceStatus overriddenStatus = InstanceStatus.UNKNOWN;
     @XStreamOmitField
     private volatile boolean isInstanceInfoDirty = false;
+    /**
+     * 每个实例在创建时 还会包含一个续约属性 代表每隔多少时间需要往注册中心续约  避免实例丢失
+     */
     private volatile LeaseInfo leaseInfo;
     @Auto
     private volatile Boolean isCoordinatingDiscoveryServer = Boolean.FALSE;
@@ -386,12 +391,12 @@ public class InstanceInfo {
 
 
     /**
-     * 代表服务的状态
+     * 代表当前实例的状态
      */
     public enum InstanceStatus {
-        UP, // Ready to receive traffic
-        DOWN, // Do not send traffic- healthcheck callback failed
-        STARTING, // Just about starting- initializations to be done - do not
+        UP, // Ready to receive traffic    能够正常接收请求
+        DOWN, // Do not send traffic- healthcheck callback failed    无法处理请求
+        STARTING, // Just about starting- initializations to be done - do not    正在启动状态 暂时无法使用
         // send traffic
         OUT_OF_SERVICE, // Intentionally shutdown for traffic
         UNKNOWN;
@@ -1324,8 +1329,8 @@ public class InstanceInfo {
     /**
      * Sets the dirty flag so that the instance information can be carried to
      * the discovery server on the next heartbeat.
-     *      将本实例信息修改成"脏" 之后 会根据该状态 发送心跳吗??? 在eurekaClient 实例化的时候 会将信息发送到注册中心并 该自身信息修改为 dirty
-     *      大概就是心跳的时候才是真正把自身信息同步到注册中心的  那么不设置为dirty 就不进行心跳了吗 eukekaServer 如何检测服务是否下线
+     * 代表负责注册实例信息的 eureka-client  或者说内嵌在实例节点上的eureka-client 发生了变化  那么会将当前节点标记成脏  并在合适的时机更新数据到eureka-server
+     * 注意这个dirty在什么时候起作用
      */
     public synchronized void setIsDirty() {
         isInstanceInfoDirty = true;
@@ -1439,10 +1444,12 @@ public class InstanceInfo {
      *
      * @param runtimeMetadata
      *            Map containing key/value pairs.
+     *            为该对象追加一组元数据  (在运行时追加)
      */
     synchronized void registerRuntimeMetadata(
             Map<String, String> runtimeMetadata) {
         metadata.putAll(runtimeMetadata);
+        // 因为添加了新的数据  所以标识当前对象不是最新的  当设置标识后代表需要在合适的时机更新该对象
         setIsDirty();
     }
 
@@ -1455,16 +1462,15 @@ public class InstanceInfo {
      * @param myInfo
      *            - The InstanceInfo object of the instance.
      * @return - The zone in which the particular instance belongs to.
-     * 一般 这里的 zone 代表从配置文件中获取的  但是instance 不一定都符合这些zone 要进行一些过滤
      */
     public static String getZone(String[] availZones, InstanceInfo myInfo) {
-        // 默认选择第一个zone
+        // 默认选择第一个zone  如果没有zone 使用 "default"
         String instanceZone = ((availZones == null || availZones.length == 0) ? "default"
                 : availZones[0]);
+        // AWS 的忽略
         if (myInfo != null
                 && myInfo.getDataCenterInfo().getName() == DataCenterInfo.Name.Amazon) {
 
-            // 如果数据中心是 AWS 就从aws 中获取zone
             String awsInstanceZone = ((AmazonInfo) myInfo.getDataCenterInfo())
                     .get(AmazonInfo.MetaDataKey.availabilityZone);
             if (awsInstanceZone != null) {

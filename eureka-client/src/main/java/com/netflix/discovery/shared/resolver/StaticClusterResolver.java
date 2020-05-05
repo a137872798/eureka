@@ -33,6 +33,9 @@ public class StaticClusterResolver<T extends EurekaEndpoint> implements ClusterR
 
     private static final Logger logger = LoggerFactory.getLogger(StaticClusterResolver.class);
 
+    /**
+     * 内部的 endpoint 是固定不变的
+     */
     private final List<T> eurekaEndpoints;
     private final String region;
 

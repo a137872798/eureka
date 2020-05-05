@@ -54,7 +54,7 @@ import static com.netflix.discovery.PropertyBasedClientConfigConstants.*;
  * </p>
  *
  * @author Karthik Ranganathan
- *
+ * 这里通过指定某个配置文件 读取相关配置信息
  */
 @Singleton
 @ProvidedBy(DefaultEurekaClientConfigProvider.class)
@@ -363,8 +363,6 @@ public class DefaultEurekaClientConfig implements EurekaClientConfig {
      * (non-Javadoc)
      *
      * @see com.netflix.discovery.EurekaClientConfig#getAvailabilityZones()
-     * 获取 region 对应的 所有 zone 信息 注意 这里首先尝试 根据 namespace 和 region 获取zone 信息
-     * 如果没有对应属性 就尝试 从 defaultZone中 获取属性 也就是为什么配置注册中心使用了  defaultZone  并且 属性还定义了"," 作为分隔符
      */
     @Override
     public String[] getAvailabilityZones(String region) {

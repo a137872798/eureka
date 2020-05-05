@@ -5,13 +5,14 @@ import com.netflix.config.DynamicPropertyFactory;
 import static com.netflix.discovery.shared.transport.PropertyBasedTransportConfigConstants.*;
 
 /**
- * 默认的传输层配置对象 也是将请求委托给内部的 config
  * @author David Liu
+ * eureka 传输层的配置对象 用于增强httpClient
  */
 public class DefaultEurekaTransportConfig implements EurekaTransportConfig {
     private static final String SUB_NAMESPACE = TRANSPORT_CONFIG_SUB_NAMESPACE + ".";
 
     private final String namespace;
+    // netflix 的配置中心
     private final DynamicPropertyFactory configInstance;
 
     public DefaultEurekaTransportConfig(String parentNamespace, DynamicPropertyFactory configInstance) {

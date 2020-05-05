@@ -15,6 +15,7 @@ import com.netflix.discovery.converters.wrappers.DecoderWrapper;
 
 /**
  * @author David Liu
+ * 代表本节点接收的数据类型   允许全数据 以及压缩数据
  */
 public enum EurekaAccept {
     // 压缩 or 非压缩

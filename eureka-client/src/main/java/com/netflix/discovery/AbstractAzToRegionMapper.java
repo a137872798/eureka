@@ -35,6 +35,8 @@ public abstract class AbstractAzToRegionMapper implements AzToRegionMapper {
      * any availability zone mapping, we will use these defaults. OTOH, if the remote region has any mapping defaults
      * will not be used.
      * 代表 一个zone 可以对应多个region  这个代表默认的 映射关系
+     * Multimap<String,String> 等价于 HashMap<String,Collection<String>>
+     *     看来region的范围要大一些  内部包含多个 availableZone
      */
     private final Multimap<String, String> defaultRegionVsAzMap =
             Multimaps.newListMultimap(new HashMap<String, Collection<String>>(), new Supplier<List<String>>() {
@@ -45,7 +47,7 @@ public abstract class AbstractAzToRegionMapper implements AzToRegionMapper {
             });
 
     /**
-     * 一般情况下 aZone 和region 是一对一的关系
+     * 一个region可以对应多个zone 反过来每个zone 都只能对应一个region 所以这里使用的是<String,String>
      */
     private final Map<String, String> availabilityZoneVsRegion = new ConcurrentHashMap<String, String>();
     /**
@@ -60,8 +62,9 @@ public abstract class AbstractAzToRegionMapper implements AzToRegionMapper {
     }
 
     /**
-     * 设置 需要拉取的 region  使用场景 是 针对 discoveryClient 在定时拉取 注册中心服务列表时 会查看配置中的region 是否发生了变化 变化的情况 要在这里更新region 和zone 的映射关系
      * @param regionsToFetch Regions to fetch. This should be the super set of all regions that this mapper should know.
+     *                       这里设置了待拉取的某个region   (会拉取到下面的availableZone吧)
+     *                       这个region是从哪来的
      */
     @Override
     public synchronized void setRegionsToFetch(String[] regionsToFetch) {
@@ -87,6 +90,7 @@ public abstract class AbstractAzToRegionMapper implements AzToRegionMapper {
                             // 这样 多个zone 都会匹配到同一个region 上
                             availabilityZoneVsRegion.put(defaultAvailabilityZone, remoteRegion);
                         }
+                        // 看来defaultZone 是不被承认的
                     } else {
                         String msg = "No availability zone information available for remote region: " + remoteRegion
                                 + ". This is required if registry information for this region is configured to be "
@@ -136,6 +140,7 @@ public abstract class AbstractAzToRegionMapper implements AzToRegionMapper {
 
     /**
      * 强制重新使用regions 去拉取 zone
+     * 一般是在某个时机 重新设置了 regionsToFetch 后 调用该方法 拉取最新的zone
      */
     @Override
     public synchronized void refreshMapping() {
@@ -147,14 +152,13 @@ public abstract class AbstractAzToRegionMapper implements AzToRegionMapper {
      * Tries to determine what region we're in, based on the provided availability zone.
      * @param availabilityZone the availability zone to inspect
      * @return the region, if available; null otherwise
-     * 尝试使用zone 解析 region
+     * 尝试使用zone 解析 region   这里怀疑zone信息可能携带了什么无效的标识 移除后重新检测
      */
     protected String parseAzToGetRegion(String availabilityZone) {
         // Here we see that whether the availability zone is following a pattern like <region><single letter>
         // If it is then we take ignore the last letter and check if the remaining part is actually a known remote
         // region. If yes, then we return that region, else null which means local region.
         if (!availabilityZone.isEmpty()) {
-            // 将 长度 -1 后又尝试去查询???
             String possibleRegion = availabilityZone.substring(0, availabilityZone.length() - 1);
             if (availabilityZoneVsRegion.containsValue(possibleRegion)) {
                 return possibleRegion;

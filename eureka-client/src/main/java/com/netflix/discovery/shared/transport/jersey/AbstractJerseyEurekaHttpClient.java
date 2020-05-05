@@ -27,6 +27,7 @@ import java.util.Map.Entry;
 import static com.netflix.discovery.shared.transport.EurekaHttpResponse.anEurekaHttpResponse;
 
 /**
+ * jersey 是某个现存的http通信框架
  * @author Tomasz Bak
  */
 public abstract class AbstractJerseyEurekaHttpClient implements EurekaHttpClient {
@@ -35,6 +36,9 @@ public abstract class AbstractJerseyEurekaHttpClient implements EurekaHttpClient
     protected static final String HTML = "html";
 
     protected final Client jerseyClient;
+    /**
+     * 对应某个eureka-server的地址
+     */
     protected final String serviceUrl;
 
     protected AbstractJerseyEurekaHttpClient(Client jerseyClient, String serviceUrl) {
@@ -43,18 +47,29 @@ public abstract class AbstractJerseyEurekaHttpClient implements EurekaHttpClient
         logger.debug("Created client for url: {}", serviceUrl);
     }
 
+    // 下面是基于RESTFUL 的各种api实现
+
+    /**
+     * 发起一个注册实例的请求
+     * @param info
+     * @return
+     */
     @Override
     public EurekaHttpResponse<Void> register(InstanceInfo info) {
         String urlPath = "apps/" + info.getAppName();
         ClientResponse response = null;
         try {
+            // 构建一个req 对象
             Builder resourceBuilder = jerseyClient.resource(serviceUrl).path(urlPath).getRequestBuilder();
+            // 追加特殊的请求头   在 eureka 架构中 存在2种请求 一种是 eureka-client 发往 eureka-server 的
+            // 一种是 eureka-server 发往 eureka-server 的称为replication请求 也是AP实现的秘诀
             addExtraHeaders(resourceBuilder);
             response = resourceBuilder
-                    .header("Accept-Encoding", "gzip")
+                    .header("Accept-Encoding", "gzip")  // 代表接收压缩数据
                     .type(MediaType.APPLICATION_JSON_TYPE)
                     .accept(MediaType.APPLICATION_JSON)
                     .post(ClientResponse.class, info);
+            // 将结果信息填充到 res中 并返回
             return anEurekaHttpResponse(response.getStatus()).headers(headersOf(response)).build();
         } finally {
             if (logger.isDebugEnabled()) {
@@ -286,6 +301,11 @@ public abstract class AbstractJerseyEurekaHttpClient implements EurekaHttpClient
 
     protected abstract void addExtraHeaders(Builder webResource);
 
+    /**
+     * 从响应结果中获取响应头
+     * @param response
+     * @return
+     */
     private static Map<String, String> headersOf(ClientResponse response) {
         MultivaluedMap<String, String> jerseyHeaders = response.getHeaders();
         if (jerseyHeaders == null || jerseyHeaders.isEmpty()) {

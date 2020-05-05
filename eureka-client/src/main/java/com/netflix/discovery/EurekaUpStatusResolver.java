@@ -24,7 +24,13 @@ import org.slf4j.LoggerFactory;
 public class EurekaUpStatusResolver {
     private static Logger LOG = LoggerFactory.getLogger(EurekaUpStatusResolver.class);
 
+    /**
+     * 当前实例状态
+     */
     private volatile InstanceInfo.InstanceStatus currentStatus = InstanceInfo.InstanceStatus.UNKNOWN;
+    /**
+     * 事件总线
+     */
     private final EventBus eventBus;
     private final EurekaClient client;
     private final AtomicLong counter = new AtomicLong();
@@ -39,6 +45,10 @@ public class EurekaUpStatusResolver {
         this.client = client;
     }
 
+    /**
+     * 事件总线感知到上下线事件后会触发该方法
+     * @param event
+     */
     @Subscribe
     public void onStatusChange(StatusChangeEvent event) {
         LOG.info("Eureka status changed from {} to {}", event.getPreviousStatus(), event.getStatus());
@@ -50,6 +60,7 @@ public class EurekaUpStatusResolver {
     public void init() {
         try {
             // Must set the initial status
+            // 初始化时 获取远端状态 并将自身标记为订阅者
             currentStatus = client.getInstanceRemoteStatus();
 
             LOG.info("Initial status set to {}", currentStatus);

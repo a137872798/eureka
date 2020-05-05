@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
  * This can be used a {@link HealthCheckCallback} resource if required.
  * @author Karthik Ranganathan, Greg Kim
  *
+ * 这里对外暴露了一个端点   健康检查 也就是看当前节点是否可用
  */
 @Path("/healthcheck")
 public class HealthCheckResource {
@@ -39,6 +40,7 @@ public class HealthCheckResource {
     @GET
     public Response doHealthCheck() {
         try {
+            // 获取当前节点实例信息
             InstanceInfo myInfo = ApplicationInfoManager.getInstance()
                     .getInfo();
 

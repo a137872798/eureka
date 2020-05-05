@@ -9,19 +9,19 @@ import com.netflix.discovery.shared.Applications;
  * Low level Eureka HTTP client API.
  *
  * @author Tomasz Bak
- *       通过 http 进行交互的 client 对象  为什么不使用自定义协议 http协议并不能双向通信
+ * 该client是用于与 eureka-server 通信的
  */
 public interface EurekaHttpClient {
 
     /**
-     * 将自身 实例信息注册到 eurekaServer
+     * 将某个实例信息注册到 eurekaServer
      * @param info
      * @return
      */
     EurekaHttpResponse<Void> register(InstanceInfo info);
 
     /**
-     * 下线
+     * 发送某个实例下线的请求
      * @param appName
      * @param id
      * @return
@@ -29,7 +29,7 @@ public interface EurekaHttpClient {
     EurekaHttpResponse<Void> cancel(String appName, String id);
 
     /**
-     * 发送心跳检测
+     * 发送某个实例的心跳包
      * @param appName
      * @param id
      * @param info
@@ -39,7 +39,7 @@ public interface EurekaHttpClient {
     EurekaHttpResponse<InstanceInfo> sendHeartBeat(String appName, String id, InstanceInfo info, InstanceStatus overriddenStatus);
 
     /**
-     * 更新当前状态  状态 对应到 UP DOWN 等 停机的时候应该会发送一个 DOWN 状态到注册中心
+     * 更新当前状态  状态 对应到 UP DOWN 等
      * @param appName
      * @param id
      * @param newStatus

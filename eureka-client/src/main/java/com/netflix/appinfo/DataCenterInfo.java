@@ -27,7 +27,7 @@ import com.netflix.discovery.converters.jackson.DataCenterTypeInfoResolver;
  *
  * @author Karthik Ranganathan
  *
- *      数据中心接口
+ *      代表某个实例属于哪个数据中心
  */
 @JsonRootName("dataCenterInfo")
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = As.PROPERTY, property = "@class")
@@ -35,7 +35,7 @@ import com.netflix.discovery.converters.jackson.DataCenterTypeInfoResolver;
 public interface DataCenterInfo {
 
     /**
-     * 当前存在 3种 数据中心 Nerfilx Amazon myOwn
+     * 当前存在 3种 数据中心 Netfilx Amazon myOwn
      */
     enum Name {Netflix, Amazon, MyOwn}
 

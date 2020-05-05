@@ -53,7 +53,7 @@ import static com.netflix.discovery.EurekaClientNames.METRIC_TRANSPORT_PREFIX;
  *
  * @author Tomasz Bak
  * @author Li gang
- * 可重试的client 工厂
+ * 为httpClient 追加重试功能
  */
 public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
 
@@ -67,7 +67,7 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
      */
     private final EurekaTransportConfig transportConfig;
     /**
-     * 该对象能将 config 中 zone 信息解析出来并抽象成 endpoint 对象
+     * 该对象能够获取本集群下所有节点
      */
     private final ClusterResolver clusterResolver;
     /**
@@ -75,7 +75,7 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
      */
     private final TransportClientFactory clientFactory;
     /**
-     * 服务状态评估对象
+     * 该对象可以评估本次请求是否被正常处理 如果没有 则进行重试
      */
     private final ServerStatusEvaluator serverStatusEvaluator;
     /**
@@ -84,10 +84,13 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
     private final int numberOfRetries;
 
     /**
-     * 维护的代理对象
+     * 维护的代理对象  请求会被委托 给该对象
      */
     private final AtomicReference<EurekaHttpClient> delegate = new AtomicReference<>();
 
+    /**
+     * 该容器负责记录失败的节点  尽可能避免下次调用
+     */
     private final Set<EurekaEndpoint> quarantineSet = new ConcurrentSkipListSet<>();
 
     public RetryableEurekaHttpClient(String name,
@@ -130,7 +133,7 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
             EurekaHttpClient currentHttpClient = delegate.get();
             EurekaEndpoint currentEndpoint = null;
             if (currentHttpClient == null) {
-                // 先获取 代表注册中心的client 对象 一个endpoint 能生成一个 HttpClient 而一个HttpClient 具备与对应注册中心 通信的能力
+                // 获取一组待使用的地址
                 if (candidateHosts == null) {
                     candidateHosts = getHostCandidates();
                     if (candidateHosts.isEmpty()) {
@@ -152,7 +155,7 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
                 EurekaHttpResponse<R> response = requestExecutor.execute(currentHttpClient);
                 // 结果是否正常
                 if (serverStatusEvaluator.accept(response.getStatusCode(), requestExecutor.getRequestType())) {
-                    // 正常情况下设置 client 否则会 尝试使用其他client
+                    // 代表成功 下次会继续使用该client
                     delegate.set(currentHttpClient);
                     if (retry > 0) {
                         logger.info("Request execution succeeded on retry #{}", retry);
@@ -197,22 +200,22 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
     }
 
     /**
-     * 获取 候选的 endpoint
+     * 获取某个集群下所有具备候选的节点
      * @return
      */
     private List<EurekaEndpoint> getHostCandidates() {
         // 从配置文件上 解析所有可用的 endpoint 对象  这里会打乱 非本 zone 的 endpoint 的顺序
         List<EurekaEndpoint> candidateHosts = clusterResolver.getClusterEndpoints();
-        // 只保留交集 该值是可能比 threshold 小的  这个容器中只保留了异常 endpoint 对象
         quarantineSet.retainAll(candidateHosts);
 
         // If enough hosts are bad, we have no choice but start over again
-        // transportConfig.getRetryableClientQuarantineRefreshPercentage() 默认值为 0.66
+        // 计算最多允许多少节点出错
         int threshold = (int) (candidateHosts.size() * transportConfig.getRetryableClientQuarantineRefreshPercentage());
         //Prevent threshold is too large
         if (threshold > candidateHosts.size()) {
             threshold = candidateHosts.size();
         }
+        // 代表所有节点都可用
         if (quarantineSet.isEmpty()) {
             // no-op
             // 这里应该是 异常的endpoint 太多了 没办法即使失败也只能继续调用
@@ -220,9 +223,9 @@ public class RetryableEurekaHttpClient extends EurekaHttpClientDecorator {
             logger.debug("Clearing quarantined list of size {}", quarantineSet.size());
             quarantineSet.clear();
         } else {
+            // 尽可能排除掉异常节点后 该列表作为候选列表
             List<EurekaEndpoint> remainingHosts = new ArrayList<>(candidateHosts.size());
             for (EurekaEndpoint endpoint : candidateHosts) {
-                // 正常情况就会将 不包含在异常容器中的endpoint 设置到 candidateHost中
                 if (!quarantineSet.contains(endpoint)) {
                     remainingHosts.add(endpoint);
                 }

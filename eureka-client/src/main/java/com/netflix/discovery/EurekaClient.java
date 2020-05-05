@@ -25,7 +25,7 @@ import com.netflix.discovery.shared.LookupService;
  *  - provide the ability to register and access the healthcheck handler for the client
  *
  * @author David Liu
- *      eurekaClient  接口实现了 LookService 因为每个 Client 既可以是服务提供者 也可以是服务消费者 这里应该是作为消费者的职能
+ *      eureka是基于client-server 模型的 server负责保存数据 而client负责发起命令
  */
 @ImplementedBy(DiscoveryClient.class)
 public interface EurekaClient extends LookupService {
@@ -38,7 +38,7 @@ public interface EurekaClient extends LookupService {
      * @param region the region that the Applications reside in
      * @return an {@link com.netflix.discovery.shared.Applications} for the matching region. a Null value
      *         is treated as the local region.
-     *         获取某个指定的region 下的所有应用实例  每个服务实例在注册的时候会划分到一个region 上 这样在获取服务实例的时候会优先从最近的 region 获取
+     *         获取某个地区下所有服务 以及它们下面的实例信息  通过分区的概念获取最近的服务实例 用于提升性能
      */
     public Applications getApplicationsForARegion(@Nullable String region);
 
@@ -48,7 +48,7 @@ public interface EurekaClient extends LookupService {
      * @param serviceUrl The string representation of the service url.
      * @return The registry information containing all applications.
      *
-     *          通过服务路径来获取对应实例
+     *          通过指定某个 eureka-server 的地址 获取提供的所有应用
      */
     public Applications getApplications(String serviceUrl);
 
@@ -58,7 +58,9 @@ public interface EurekaClient extends LookupService {
      * @param vipAddress The VIP address to match the instances for.
      * @param secure true if it is a secure vip address, false otherwise
      * @return - The list of {@link InstanceInfo} objects matching the criteria
-     *      使用vip 地址获取对应的服务实例
+     *      指定某个给定的 vip地址  获取下面所有实例  （instanceInfo 本身也包含了 application 信息）
+     *      也就是某个物理节点如果同时提供了 多个 application  那么会存在多个 application->instanceInfo 的映射关系
+     *      同时它们的 id 还是一致的 (推测)
      */
     public List<InstanceInfo> getInstancesByVipAddress(String vipAddress, boolean secure);
 
@@ -71,7 +73,7 @@ public interface EurekaClient extends LookupService {
      *               assumed.
      *
      * @return - The list of {@link InstanceInfo} objects matching the criteria, empty list if not instances found.
-     *      通过vip 地址 和 region 定位服务实例
+     *      这个vip地址到底指什么 在没有指定application 会返回所有的 实例吗  那么为什么不干脆返回 Applications呢???
      */
     public List<InstanceInfo> getInstancesByVipAddress(String vipAddress, boolean secure, @Nullable String region);
 
@@ -94,15 +96,13 @@ public interface EurekaClient extends LookupService {
 
     /**
      * @return in String form all regions (local + remote) that can be accessed by this client
-     *      获取当前所有 region
+     *      获取当前所有 region    eureka-server 集群中每个节点的regions 都一样吗 还有 它们本身会在同一个region吗
      */
     public Set<String> getAllKnownRegions();
 
     /**
      * @return the current self instance status as seen on the Eureka server.
-     *
-     *      可以获取当前client 在server 上的状态 应该是判断 当前client 是否处于正常状态
-     *      对应status 为 UP DOWN STARTING OUT_OF_SERVICE UNKNOW   OUT_OF_SERVICE  应该是指主动下线
+     *     获取当前节点在 eureka-server 的状态
      */
     public InstanceInfo.InstanceStatus getInstanceRemoteStatus();
 
@@ -171,7 +171,7 @@ public interface EurekaClient extends LookupService {
      * by {@link EurekaClientConfig#getInstanceInfoReplicationIntervalSeconds()}.
      *
      * @param healthCheckHandler app specific healthcheck handler.
-     *                           注册指定的心跳处理器  暂时不确定是做什么的
+     *                           这里注册一个健康检查器  用于判断当前节点是否可用
      */
     public void registerHealthCheck(HealthCheckHandler healthCheckHandler);
 
@@ -203,7 +203,7 @@ public interface EurekaClient extends LookupService {
     
     /**
      * @return the current registered healthcheck handler
-     *      获取当前注册的心跳检测处理器 看来一个client 只能绑定一个 心跳检测处理器
+     *      获取当前注册的心跳检测处理器
      */
     public HealthCheckHandler getHealthCheckHandler();
 

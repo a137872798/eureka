@@ -4,10 +4,14 @@ import com.sun.jersey.client.apache4.ApacheHttpClient4;
 
 /**
  * @author David Liu
- * httpClient 的包装对象???
+ * 适配对象  在eureka中很多适配组件都是将2个框架的名字拼接起来
  */
 public interface EurekaJerseyClient {
 
+    /**
+     * 获取client的部分
+     * @return
+     */
     ApacheHttpClient4 getClient();
 
     /**

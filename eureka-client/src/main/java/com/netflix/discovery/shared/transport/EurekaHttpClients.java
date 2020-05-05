@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * @author Tomasz Bak
+ * 提供一系列静态方法
  */
 public final class EurekaHttpClients {
 
@@ -137,9 +138,12 @@ public final class EurekaHttpClients {
     static ClosableResolver<AwsEndpoint> defaultBootstrapResolver(final EurekaClientConfig clientConfig,
                                                                   final InstanceInfo myInstanceInfo,
                                                                   final EndpointRandomizer randomizer) {
+        // 根据当前节点所在的region 解析出所有待使用的zone
         String[] availZones = clientConfig.getAvailabilityZones(clientConfig.getRegion());
+        // 获取某个zone 作为本节点的地区
         String myZone = InstanceInfo.getZone(availZones, myInstanceInfo);
 
+        // 生成地区亲和的解析器
         ClusterResolver<AwsEndpoint> delegateResolver = new ZoneAffinityClusterResolver(
                 new ConfigClusterResolver(clientConfig, myInstanceInfo),
                 myZone,

@@ -32,12 +32,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * </ul>
  *
  * @author Tomasz Bak
- * 令牌桶算法核心
+ * 令牌桶算法
  */
 public class RateLimiter {
 
     /**
-     * 转换比率的时间 / 生成一个 token 需要消耗的时间
+     * 这是一个换算用单位
      */
     private final long rateToMsConversion;
 
@@ -61,12 +61,11 @@ public class RateLimiter {
      */
     public RateLimiter(TimeUnit averageRateUnit) {
         switch (averageRateUnit) {
-            // 代表1000 毫秒转换一次
+            // 初始化换算单位
             case SECONDS:
                 rateToMsConversion = 1000;
                 break;
             case MINUTES:
-                // 代表 60000毫秒(一分钟)转换一次
                 rateToMsConversion = 60 * 1000;
                 break;
             default:
@@ -77,7 +76,7 @@ public class RateLimiter {
     /**
      * 传入 平均比率 和桶大小 来获取
      * @param burstSize
-     * @param averageRate
+     * @param averageRate   每秒预期生成多少token
      * @return
      */
     public boolean acquire(int burstSize, long averageRate) {
@@ -87,7 +86,7 @@ public class RateLimiter {
     /**
      *
      * @param burstSize 桶大小
-     * @param averageRate 平均比率
+     * @param averageRate 每秒生成多少token
      * @param currentTimeMillis 当前时间
      * @return
      */
@@ -108,7 +107,7 @@ public class RateLimiter {
     /**
      * 填满令牌
      * @param burstSize 桶大小
-     * @param averageRate 平均比率
+     * @param averageRate
      * @param currentTimeMillis 当前时间
      */
     private void refillToken(int burstSize, long averageRate, long currentTimeMillis) {
@@ -117,7 +116,7 @@ public class RateLimiter {
         // 代表距离上次填满过了多久
         long timeDelta = currentTimeMillis - refillTime;
 
-        // 看来是按照时间来分配令牌数的 然后请求 放流的时候就会消耗令牌数
+        // 计算当前应当存在多少token
         long newTokens = timeDelta * averageRate / rateToMsConversion;
         // 代表 至少生成了 一个令牌
         if (newTokens > 0) {
@@ -133,7 +132,7 @@ public class RateLimiter {
                     int currentLevel = consumedTokens.get();
                     // 不能让 使用的令牌数 超过桶的大小
                     int adjustedLevel = Math.min(currentLevel, burstSize); // In case burstSize decreased
-                    // 因为生成了 新的token 这样 被消耗的 token 就会减少 变相等同于 桶中的令牌数变多了
+                    // 被消耗的减少了 也就是当前可用的变多了
                     int newLevel = (int) Math.max(0, adjustedLevel - newTokens);
                     if (consumedTokens.compareAndSet(currentLevel, newLevel)) {
                         return;

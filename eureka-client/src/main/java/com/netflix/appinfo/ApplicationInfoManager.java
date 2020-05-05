@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  *
  *
  * @author Karthik Ranganathan, Greg Kim
- * 该对象用于 操作内部的 InstanceInfo （该对象代表一个client  实例 通过抽取 eureka-client 文件生成属性）
+ * 该管理器 管理的instanceInfo是本 eureka-client
  */
 @Singleton
 public class ApplicationInfoManager {
@@ -60,6 +60,9 @@ public class ApplicationInfoManager {
 
     private static ApplicationInfoManager instance = new ApplicationInfoManager(null, null, null);
 
+    /**
+     * 为该对象设置的一组监听器
+     */
     protected final Map<String, StatusChangeListener> listeners;
     /**
      * 状态映射对象
@@ -71,7 +74,7 @@ public class ApplicationInfoManager {
      */
     private InstanceInfo instanceInfo;
     /**
-     * 实例配置
+     * 本client的配置信息
      */
     private EurekaInstanceConfig config;
 
@@ -107,6 +110,11 @@ public class ApplicationInfoManager {
         instance = this;
     }
 
+    /**
+     * 当没有传入 instanceInfo时  通过provider 对象 从config中抽取信息 并生成instanceInfo
+     * @param config
+     * @param optionalArgs
+     */
     public ApplicationInfoManager(EurekaInstanceConfig config, /* nullable */ OptionalArgs optionalArgs) {
         this(config, new EurekaConfigBasedInstanceInfoProvider(config).get(), optionalArgs);
     }
@@ -168,7 +176,7 @@ public class ApplicationInfoManager {
      * please use the mechanism described in {@link EurekaInstanceConfig#getMetadataMap()}
      *
      * @param appMetadata application specific meta data.
-     *                    将元数据设置到instanceInfo
+     *
      */
     public void registerAppMetadata(Map<String, String> appMetadata) {
         instanceInfo.registerRuntimeMetadata(appMetadata);
@@ -180,9 +188,10 @@ public class ApplicationInfoManager {
      * of a status change event.
      *
      * @param status Status of the instance
-     *               更改状态 并通知所有监听器
+     *               更新当前实例的状态
      */
     public synchronized void setInstanceStatus(InstanceStatus status) {
+        // 通过映射器 修改实例状态
         InstanceStatus next = instanceStatusMapper.map(status);
         if (next == null) {
             return;
@@ -190,6 +199,7 @@ public class ApplicationInfoManager {
 
         InstanceStatus prev = instanceInfo.setStatus(next);
         if (prev != null) {
+            // 触发所有监听器
             for (StatusChangeListener listener : listeners.values()) {
                 try {
                     listener.notify(new StatusChangeEvent(prev, next));
@@ -214,14 +224,14 @@ public class ApplicationInfoManager {
      * server on next heartbeat.
      *
      * see {@link InstanceInfo#getHostName()} for explanation on why the hostname is used as the default address
-     *      更新当前主机信息 如果是基于本地配置 不会发生变化 否则会从 类似于 配置中心的地方 定期获取最新配置
+     *      刷新当前ip信息 并且如果 发生了变化就设置 instance为dirty
      */
     public void refreshDataCenterInfoIfRequired() {
         // 获取应用实例的 地址 准备更新信息
         String existingAddress = instanceInfo.getHostName();
 
         String existingSpotInstanceAction = null;
-        //有关 amazon 的先不管
+        //有关 亚马逊的先不管
         if (instanceInfo.getDataCenterInfo() instanceof AmazonInfo) {
             existingSpotInstanceAction = ((AmazonInfo) instanceInfo.getDataCenterInfo()).get(AmazonInfo.MetaDataKey.spotInstanceAction);
         }
@@ -229,18 +239,22 @@ public class ApplicationInfoManager {
         String newAddress;
         if (config instanceof RefreshableInstanceConfig) {
             // Refresh data center info, and return up to date address
-            // 获取最新的 地址
+            // 从配置中心 获取最新的地址
             newAddress = ((RefreshableInstanceConfig) config).resolveDefaultAddress(true);
         } else {
+            // 可能云本身也具备某种动态更新的能力吧 这里对云还不了解
             newAddress = config.getHostName(true);
         }
+        // 获取最新的ip地址
         String newIp = config.getIpAddress();
 
+        // 代表地址发生了变化  那么要更新当前实例信息
         if (newAddress != null && !newAddress.equals(existingAddress)) {
             logger.warn("The address changed from : {} => {}", existingAddress, newAddress);
             updateInstanceInfo(newAddress, newIp);
         }
 
+        // 亚马逊先不看
         if (config.getDataCenterInfo() instanceof AmazonInfo) {
             String newSpotInstanceAction = ((AmazonInfo) config.getDataCenterInfo()).get(AmazonInfo.MetaDataKey.spotInstanceAction);
             if (newSpotInstanceAction != null && !newSpotInstanceAction.equals(existingSpotInstanceAction)) {
@@ -252,10 +266,16 @@ public class ApplicationInfoManager {
         }        
     }
 
+    /**
+     * 因为本节点的ip发生了变化 所以要标记成 dirty 并在合适的时机 进行刷新
+     * @param newAddress
+     * @param newIp
+     */
     private void updateInstanceInfo(String newAddress, String newIp) {
         // :( in the legacy code here the builder is acting as a mutator.
         // This is hard to fix as this same instanceInfo instance is referenced elsewhere.
         // We will most likely re-write the client at sometime so not fixing for now.
+        // 这里直接把实例作为参数设置进去了  然后builder.setXXX 就是在 instanceInfo的基础上 修改属性 相当于就是 instanceInfo.setXXX
         InstanceInfo.Builder builder = new InstanceInfo.Builder(instanceInfo);
         if (newAddress != null) {
             builder.setHostName(newAddress);
@@ -276,11 +296,10 @@ public class ApplicationInfoManager {
         if (leaseInfo == null) {
             return;
         }
-        //获取 租约的超时时间 以及新的 间隔时间
+        // 这里会间接从配置中心拉取最新配置
         int currentLeaseDuration = config.getLeaseExpirationDurationInSeconds();
         int currentLeaseRenewal = config.getLeaseRenewalIntervalInSeconds();
-        //一旦有关 租约的配置信息发生了变化 就生成一个新的 LeaseInfo  那么 热部署就是这么实现的 定期会去读取自身的配置信息 一旦发现修改就同步到 订阅自己的各个注册中心上
-        //而 配置信息 又是由配置中心统一管理
+
         if (leaseInfo.getDurationInSecs() != currentLeaseDuration || leaseInfo.getRenewalIntervalInSecs() != currentLeaseRenewal) {
             LeaseInfo newLeaseInfo = LeaseInfo.Builder.newBuilder()
                     .setRenewalIntervalInSecs(currentLeaseRenewal)

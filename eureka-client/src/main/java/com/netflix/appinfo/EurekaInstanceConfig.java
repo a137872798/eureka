@@ -69,7 +69,6 @@ public interface EurekaInstanceConfig {
     String getAppGroupName();
 
     /**
-     * 该服务是否允许获取流量???
      * Indicates whether the instance should be enabled for taking traffic as
      * soon as it is registered with eureka. Sometimes the application might
      * need to do some pre-processing before it is ready to take traffic.
@@ -77,6 +76,7 @@ public interface EurekaInstanceConfig {
      * :( public API typos are the worst. I think this was meant to be "OnInit".
      *
      * @return true to immediately start taking traffic, false otherwise.
+     * 代表该实例是否允许在注册后能够被立即访问
      */
     boolean isInstanceEnabledOnit();
 
@@ -219,13 +219,13 @@ public interface EurekaInstanceConfig {
     Map<String, String> getMetadataMap();
 
     /**
-     * 获取数据中心数据
      * Returns the data center this instance is deployed. This information is
      * used to get some AWS specific instance information if the instance is
      * deployed in AWS.
      *
      * @return information that indicates which data center this instance is
      *         deployed in.
+     *         获取该实例所属的数据中心
      */
     DataCenterInfo getDataCenterInfo();
 

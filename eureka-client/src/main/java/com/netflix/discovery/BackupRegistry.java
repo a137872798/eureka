@@ -30,7 +30,7 @@ import com.netflix.discovery.shared.Applications;
  * </p>
  *
  * @author Karthik Ranganathan
- *
+ * 这里是某种降级措施  当无法从 eureka-server 上获取任何信息时使用
  */
 @ImplementedBy(NotImplementedRegistryImpl.class)
 public interface BackupRegistry {

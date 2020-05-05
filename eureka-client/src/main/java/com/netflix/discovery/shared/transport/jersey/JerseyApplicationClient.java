@@ -26,6 +26,7 @@ import java.util.Map;
  * A version of Jersey1 {@link EurekaHttpClient} to be used by applications.
  *
  * @author Tomasz Bak
+ * 该对象携带了额外的请求头 并且在发送请求前  会组装上这些请求头
  */
 public class JerseyApplicationClient extends AbstractJerseyEurekaHttpClient {
 

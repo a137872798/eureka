@@ -32,12 +32,12 @@ import org.slf4j.LoggerFactory;
 import static com.netflix.discovery.EurekaClientNames.METRIC_TRANSPORT_PREFIX;
 
 /**
- * 在规定时间 会强制重连所有连接 防止  client 粘滞在一个 server上  也是实现装饰器模式
  * {@link SessionedEurekaHttpClient} enforces full reconnect at a regular interval (a session), preventing
  * a client to sticking to a particular Eureka server instance forever. This in turn guarantees even
  * load distribution in case of cluster topology change.
  *
  * @author Tomasz Bak
+ * 这里是追加重连功能
  */
 public class SessionedEurekaHttpClient extends EurekaHttpClientDecorator {
     private static final Logger logger = LoggerFactory.getLogger(SessionedEurekaHttpClient.class);
@@ -45,7 +45,13 @@ public class SessionedEurekaHttpClient extends EurekaHttpClientDecorator {
     private final Random random = new Random();
 
     private final String name;
+    /**
+     * 用于生成client 的工厂对象
+     */
     private final EurekaHttpClientFactory clientFactory;
+    /**
+     * 某个会话的持续时间
+     */
     private final long sessionDurationMs;
     private volatile long currentSessionDurationMs;
 
@@ -68,7 +74,7 @@ public class SessionedEurekaHttpClient extends EurekaHttpClientDecorator {
     }
 
     /**
-     * 通过该对象 来执行任务 实际的实现逻辑 在 request 对象内已经包含了
+     * 每当某个client 存在一定时长后 就会销毁之前的对象 并重新构建一个 http 对象
      * @param requestExecutor
      * @param <R>
      * @return

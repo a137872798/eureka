@@ -109,13 +109,13 @@ import com.netflix.servo.monitor.Stopwatch;
  *
  * @author Karthik Ranganathan, Greg Kim
  * @author Spencer Gibb
- *
+ * eureka-client 的核心类 负责与 eureka-server 交互 以及注册服务实例  拉取某服务下所有实例等方法
  */
 @Singleton
 public class DiscoveryClient implements EurekaClient {
     private static final Logger logger = LoggerFactory.getLogger(DiscoveryClient.class);
 
-    // Constants
+    // Constants   这是某个特殊的请求头
     public static final String HTTP_X_DISCOVERY_ALLOW_REDIRECT = "X-Discovery-AllowRedirect";
 
     private static final String VALUE_DELIMITER = ",";
@@ -151,7 +151,11 @@ public class DiscoveryClient implements EurekaClient {
 
     private final Provider<HealthCheckHandler> healthCheckHandlerProvider;
     private final Provider<HealthCheckCallback> healthCheckCallbackProvider;
+    /**
+     * 注册前置钩子
+     */
     private final PreRegistrationHandler preRegistrationHandler;
+
     private final AtomicReference<Applications> localRegionApps = new AtomicReference<Applications>();
     private final Lock fetchRegistryUpdateLock = new ReentrantLock();
     // monotonically increasing generation counter to ensure stale threads do not reset registry to an older version
@@ -162,9 +166,21 @@ public class DiscoveryClient implements EurekaClient {
     private final AtomicReference<String[]> remoteRegionsRef;
     private final InstanceRegionChecker instanceRegionChecker;
 
+    /**
+     * 该对象负责打乱一组 url的顺序
+     */
     private final EndpointUtils.ServiceUrlRandomizer urlRandomizer;
+    /**
+     * 打乱 endpoint
+     */
     private final EndpointRandomizer endpointRandomizer;
+    /**
+     * 这是降级策略
+     */
     private final Provider<BackupRegistry> backupRegistryProvider;
+    /**
+     * 该对象内部包含各种通信组件
+     */
     private final EurekaTransport eurekaTransport;
 
     private final AtomicReference<HealthCheckHandler> healthCheckHandlerRef = new AtomicReference<>();
@@ -173,10 +189,19 @@ public class DiscoveryClient implements EurekaClient {
     private final CopyOnWriteArraySet<EurekaEventListener> eventListeners = new CopyOnWriteArraySet<>();
 
     private String appPathIdentifier;
+    /**
+     * 状态变更监听器
+     */
     private ApplicationInfoManager.StatusChangeListener statusChangeListener;
 
+    /**
+     * 该对象负责定期将自身数据发送到 eureka-server
+     */
     private InstanceInfoReplicator instanceInfoReplicator;
 
+    /**
+     * 当前注册次数
+     */
     private volatile int registrySize = 0;
     private volatile long lastSuccessfulRegistryFetchTimestamp = -1;
     private volatile long lastSuccessfulHeartbeatTimestamp = -1;
@@ -193,6 +218,9 @@ public class DiscoveryClient implements EurekaClient {
 
     private final Stats stats = new Stats();
 
+    /**
+     * 传输对象 内部包含各种通信组件
+     */
     private static final class EurekaTransport {
         private ClosableResolver bootstrapResolver;
         private TransportClientFactory transportClientFactory;
@@ -274,6 +302,12 @@ public class DiscoveryClient implements EurekaClient {
         this(applicationInfoManager, config, (AbstractDiscoveryClientOptionalArgs) args);
     }
 
+    /**
+     * 看一下推荐的注册方式
+     * @param applicationInfoManager
+     * @param config
+     * @param args
+     */
     public DiscoveryClient(ApplicationInfoManager applicationInfoManager, final EurekaClientConfig config, AbstractDiscoveryClientOptionalArgs args) {
         this(applicationInfoManager, config, args, ResolverUtils::randomize);
     }
@@ -282,6 +316,7 @@ public class DiscoveryClient implements EurekaClient {
         this(applicationInfoManager, config, args, new Provider<BackupRegistry>() {
             private volatile BackupRegistry backupRegistryInstance;
 
+            // 这里尝试通过配置文件读取className并使用反射创建降级策略对象
             @Override
             public synchronized BackupRegistry get() {
                 if (backupRegistryInstance == null) {
@@ -318,7 +353,15 @@ public class DiscoveryClient implements EurekaClient {
                     Provider<BackupRegistry> backupRegistryProvider) {
         this(applicationInfoManager, config, args, backupRegistryProvider, ResolverUtils::randomize);
     }
-    
+
+    /**
+     * 核心构造函数
+     * @param applicationInfoManager
+     * @param config
+     * @param args   该对象相当于一个参数总集
+     * @param backupRegistryProvider
+     * @param endpointRandomizer 该对象负责打乱endpoint
+     */
     @Inject
     DiscoveryClient(ApplicationInfoManager applicationInfoManager, EurekaClientConfig config, AbstractDiscoveryClientOptionalArgs args,
                     Provider<BackupRegistry> backupRegistryProvider, EndpointRandomizer endpointRandomizer) {
@@ -348,11 +391,14 @@ public class DiscoveryClient implements EurekaClient {
 
         this.backupRegistryProvider = backupRegistryProvider;
         this.endpointRandomizer = endpointRandomizer;
+        // 通过instance的hash值来打乱url
         this.urlRandomizer = new EndpointUtils.InstanceInfoBasedUrlRandomizer(instanceInfo);
         localRegionApps.set(new Applications());
 
+        // 代表第几次注册 推测每次注册时该值都会增加
         fetchRegistryGeneration = new AtomicLong(0);
 
+        // 获取当前节点允许访问到的region
         remoteRegionsToFetch = new AtomicReference<String>(clientConfig.fetchRegistryForRemoteRegions());
         remoteRegionsRef = new AtomicReference<>(remoteRegionsToFetch.get() == null ? null : remoteRegionsToFetch.get().split(","));
 
@@ -362,6 +408,7 @@ public class DiscoveryClient implements EurekaClient {
             this.registryStalenessMonitor = ThresholdLevelsMetric.NO_OP_METRIC;
         }
 
+        // 是否需要将自身注册到eureka上
         if (config.shouldRegisterWithEureka()) {
             this.heartbeatStalenessMonitor = new ThresholdLevelsMetric(this, METRIC_REGISTRATION_PREFIX + "lastHeartbeatSec_", new long[]{15L, 30L, 60L, 120L, 240L, 480L});
         } else {
@@ -370,6 +417,7 @@ public class DiscoveryClient implements EurekaClient {
 
         logger.info("Initializing Eureka in region {}", clientConfig.getRegion());
 
+        // 当本节点既不需要注册到 eureka-server 也不需要 从eureka-server 拉取数据 那么初始化已经完成了 (不需要与服务器交互)
         if (!config.shouldRegisterWithEureka() && !config.shouldFetchRegistry()) {
             logger.info("Client configured to neither register nor query for data.");
             scheduler = null;
@@ -402,7 +450,7 @@ public class DiscoveryClient implements EurekaClient {
 
             heartbeatExecutor = new ThreadPoolExecutor(
                     1, clientConfig.getHeartbeatExecutorThreadPoolSize(), 0, TimeUnit.SECONDS,
-                    new SynchronousQueue<Runnable>(),
+                    new SynchronousQueue<Runnable>(),   // 这里使用同步器队列  可以自动去重
                     new ThreadFactoryBuilder()
                             .setNameFormat("DiscoveryClient-HeartbeatExecutor-%d")
                             .setDaemon(true)
@@ -411,14 +459,16 @@ public class DiscoveryClient implements EurekaClient {
 
             cacheRefreshExecutor = new ThreadPoolExecutor(
                     1, clientConfig.getCacheRefreshExecutorThreadPoolSize(), 0, TimeUnit.SECONDS,
-                    new SynchronousQueue<Runnable>(),
+                    new SynchronousQueue<Runnable>(),   // 自动去重
                     new ThreadFactoryBuilder()
                             .setNameFormat("DiscoveryClient-CacheRefreshExecutor-%d")
                             .setDaemon(true)
                             .build()
             );  // use direct handoff
 
+            //  生成通信对象
             eurekaTransport = new EurekaTransport();
+            // 使用相关参数初始化通信对象 并且发起定时查询/注册任务
             scheduleServerEndpointTask(eurekaTransport, args);
 
             AzToRegionMapper azToRegionMapper;
@@ -476,6 +526,11 @@ public class DiscoveryClient implements EurekaClient {
                 initTimestampMs, initRegistrySize);
     }
 
+    /**
+     * 定期往eureka-server发送请求
+     * @param eurekaTransport
+     * @param args
+     */
     private void scheduleServerEndpointTask(EurekaTransport eurekaTransport,
                                             AbstractDiscoveryClientOptionalArgs args) {
 
@@ -498,7 +553,8 @@ public class DiscoveryClient implements EurekaClient {
         TransportClientFactories transportClientFactories = argsTransportClientFactories == null
                 ? new Jersey1TransportClientFactories()
                 : argsTransportClientFactories;
-                
+
+        // ssl的忽略
         Optional<SSLContext> sslContext = args == null
                 ? Optional.empty()
                 : args.getSSLContext();
@@ -508,6 +564,7 @@ public class DiscoveryClient implements EurekaClient {
 
         // If the transport factory was not supplied with args, assume they are using jersey 1 for passivity
         eurekaTransport.transportClientFactory = providedJerseyClient == null
+                // 此时client 还没有初始化时 会通过该方法构造
                 ? transportClientFactories.newTransportClientFactory(clientConfig, additionalFilters, applicationInfoManager.getInfo(), sslContext, hostnameVerifier)
                 : transportClientFactories.newTransportClientFactory(additionalFilters, providedJerseyClient);
 
@@ -515,12 +572,15 @@ public class DiscoveryClient implements EurekaClient {
             @Override
             public Applications getApplications(int stalenessThreshold, TimeUnit timeUnit) {
                 long thresholdInMs = TimeUnit.MILLISECONDS.convert(stalenessThreshold, timeUnit);
+                // 获取距上次成功拉取的时间戳
                 long delay = getLastSuccessfulRegistryFetchTimePeriod();
+                // 代表长时间没有更新本地数据 忽略之前缓存的应用信息
                 if (delay > thresholdInMs) {
                     logger.info("Local registry is too stale for local lookup. Threshold:{}, actual:{}",
                             thresholdInMs, delay);
                     return null;
                 } else {
+                    // 返回之前拉取并缓存在本地的数据
                     return localRegionApps.get();
                 }
             }
@@ -530,7 +590,7 @@ public class DiscoveryClient implements EurekaClient {
                 clientConfig,
                 transportConfig,
                 eurekaTransport.transportClientFactory,
-                applicationInfoManager.getInfo(),
+                applicationInfoManager.getInfo(),  // 获取本节点的实例信息
                 applicationsSource,
                 endpointRandomizer
         );

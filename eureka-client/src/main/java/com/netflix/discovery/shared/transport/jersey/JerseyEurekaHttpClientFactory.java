@@ -55,13 +55,18 @@ import javax.net.ssl.SSLContext;
 import static com.netflix.discovery.util.DiscoveryBuildInfo.buildVersion;
 
 /**
- * 默认的 httpClient 工厂
  * @author Tomasz Bak
  */
 public class JerseyEurekaHttpClientFactory implements TransportClientFactory {
 
+    /**
+     * 这个应该是 eureka内置的请求头
+     */
     public static final String HTTP_X_DISCOVERY_ALLOW_REDIRECT = "X-Discovery-AllowRedirect";
 
+    /**
+     * 该对象是 apacheClient 的包装对象
+     */
     private final EurekaJerseyClient jerseyClient;
     private final ApacheHttpClient4 apacheClient;
     private final ApacheHttpClientConnectionCleaner cleaner;
@@ -104,6 +109,11 @@ public class JerseyEurekaHttpClientFactory implements TransportClientFactory {
         }
     }
 
+    /**
+     * 实际上每次 构建client 都是复用同一个apacheClient
+     * @param endpoint
+     * @return
+     */
     @Override
     public EurekaHttpClient newClient(EurekaEndpoint endpoint) {
         return new JerseyApplicationClient(apacheClient, endpoint.getServiceUrl(), additionalHeaders);
@@ -203,6 +213,7 @@ public class JerseyEurekaHttpClientFactory implements TransportClientFactory {
         public JerseyEurekaHttpClientFactory build() {
             Map<String, String> additionalHeaders = new HashMap<>();
             if (allowRedirect) {
+                // 本次请求是否允许被重定向  该请求头是eureka内置的
                 additionalHeaders.put(HTTP_X_DISCOVERY_ALLOW_REDIRECT, "true");
             }
             if (EurekaAccept.compact == eurekaAccept) {

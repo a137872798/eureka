@@ -2,6 +2,7 @@ package com.netflix.appinfo;
 
 /**
  * This class holds metadata information related to eureka client auth with the eureka server
+ * 记录当前client 的版本信息
  */
 public class EurekaClientIdentity extends AbstractEurekaIdentity {
     public static final String DEFAULT_CLIENT_NAME = "DefaultClient";

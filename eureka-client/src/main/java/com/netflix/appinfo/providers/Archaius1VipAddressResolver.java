@@ -8,7 +8,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * vip地址解析器
+ * archaius 是 netflix的 配置中心
+ * 这个类的意思是 如果address 本身携带占位符那么去配置中心替换成实际配置
  */
 public class Archaius1VipAddressResolver implements VipAddressResolver {
 
@@ -30,6 +31,7 @@ public class Archaius1VipAddressResolver implements VipAddressResolver {
         Matcher matcher = VIP_ATTRIBUTES_PATTERN.matcher(result);
         while (matcher.find()) {
             String key = matcher.group(1);
+            // 去配置中心读取数据  他这个配置中心开放的api
             String value = DynamicPropertyFactory.getInstance().getStringProperty(key, "").get();
 
             logger.debug("att:{}", matcher.group());

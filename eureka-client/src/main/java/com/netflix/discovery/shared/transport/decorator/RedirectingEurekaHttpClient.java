@@ -42,14 +42,14 @@ import org.slf4j.LoggerFactory;
  * Methods in this class may be called concurrently.
  *
  * @author Tomasz Bak
- *  直接的 httpClient 对象
+ * 该对象能够自动识别重定向指令 并自动进行转发
  */
 public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
 
     private static final Logger logger = LoggerFactory.getLogger(RedirectingEurekaHttpClient.class);
 
     /**
-     * 最大遵循数为 10
+     * 最大转发次数  也就是可能跳转到一个新的client 后发现请求还需要被转发
      */
     public static final int MAX_FOLLOWED_REDIRECTS = 10;
     private static final Pattern REDIRECT_PATH_REGEX = Pattern.compile("(.*/v2/)apps(/.*)?$");
@@ -124,6 +124,11 @@ public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
     public static TransportClientFactory createFactory(final TransportClientFactory delegateFactory) {
         final DnsServiceImpl dnsService = new DnsServiceImpl();
         return new TransportClientFactory() {
+            /**
+             * 该工厂每次处理不同的 endpoint 时  就会返回不同的client 用该对象发送请求就会自动发送到对应的endpoint 上
+             * @param endpoint
+             * @return
+             */
             @Override
             public EurekaHttpClient newClient(EurekaEndpoint endpoint) {
                 return new RedirectingEurekaHttpClient(endpoint.getServiceUrl(), delegateFactory, dnsService);
@@ -147,7 +152,7 @@ public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
                                                          AtomicReference<EurekaHttpClient> currentHttpClientRef) {
         URI targetUrl = null;
         for (int followRedirectCount = 0; followRedirectCount < MAX_FOLLOWED_REDIRECTS; followRedirectCount++) {
-            // 成功情况直接返回结果
+            // 如果返回的结果不是 重定向相关的就可以直接返回结果
             EurekaHttpResponse<R> httpResponse = requestExecutor.execute(currentHttpClientRef.get());
             if (httpResponse.getStatusCode() != 302) {
                 if (followRedirectCount == 0) {
@@ -158,12 +163,12 @@ public class RedirectingEurekaHttpClient extends EurekaHttpClientDecorator {
                 return httpResponse;
             }
 
+            // 基于结果的url 重新构建client 对象 并继续发起请求
             targetUrl = getRedirectBaseUri(httpResponse.getLocation());
             if (targetUrl == null) {
                 throw new TransportException("Invalid redirect URL " + httpResponse.getLocation());
             }
 
-            // 设置一个新对象
             currentHttpClientRef.getAndSet(null).shutdown();
             currentHttpClientRef.set(factory.newClient(new DefaultEndpoint(targetUrl.toString())));
         }

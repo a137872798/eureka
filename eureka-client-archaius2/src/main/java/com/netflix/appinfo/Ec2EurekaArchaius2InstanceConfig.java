@@ -17,7 +17,7 @@ import com.netflix.archaius.api.Config;
  * 
  * 
  * @author elandau
- *
+ * 这是一个适配模块  相当于使用了一个动态的config (基于archaius动态配置能力)
  */
 @Singleton
 public class Ec2EurekaArchaius2InstanceConfig extends EurekaArchaius2InstanceConfig implements RefreshableInstanceConfig {

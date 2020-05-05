@@ -3,7 +3,7 @@ package com.netflix.appinfo;
 import javax.annotation.Nullable;
 
 /**
- * 代表具备 惟一性的 对象
+ * 主要是用于记录当前实例的版本号 等信息
  */
 public abstract class AbstractEurekaIdentity {
     public static final String PREFIX = "DiscoveryIdentity-";

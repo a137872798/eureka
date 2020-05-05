@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author Karthik Ranganathan
  * 基础配置对象 内部维护了一些默认值
+ * 在eureka的架构中 认为每个服务提供者 内嵌一个eureka-client
  */
 public abstract class AbstractInstanceConfig implements EurekaInstanceConfig {
     private static final Logger logger = LoggerFactory.getLogger(AbstractInstanceConfig.class);
@@ -49,6 +50,10 @@ public abstract class AbstractInstanceConfig implements EurekaInstanceConfig {
     private static final int NON_SECURE_PORT = 80;
     private static final int SECURE_PORT = 443;
     private static final boolean INSTANCE_ENABLED_ON_INIT = false;
+
+    /**
+     * 本节点的主机信息
+     */
     private static final Pair<String, String> hostInfo = getHostInfo();
 
     /**
@@ -217,6 +222,10 @@ public abstract class AbstractInstanceConfig implements EurekaInstanceConfig {
 
     public boolean shouldBroadcastPublicIpv4Addr () { return false; }
 
+    /**
+     * 获取本节点的主机信息
+     * @return
+     */
     private static Pair<String, String> getHostInfo() {
         Pair<String, String> pair;
         try {

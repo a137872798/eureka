@@ -6,7 +6,7 @@ package com.netflix.discovery;
  * information before hand.
  *
  * @author Nitesh Kant
- * 代表 可用zone 到 region 的映射
+ * 代表 availableZone 到 region 的映射
  */
 public interface AzToRegionMapper {
 
@@ -16,7 +16,7 @@ public interface AzToRegionMapper {
      * @param availabilityZone Availability zone for which the region is to be retrieved.
      *
      * @return The region for the passed zone.
-     * 传入一个可用的 zone 获取到对应的region
+     * 将可用地区转换成 region
      */
     String getRegionForAvailabilityZone(String availabilityZone);
 
@@ -24,13 +24,13 @@ public interface AzToRegionMapper {
      * Update the regions that this mapper knows about.
      *
      * @param regionsToFetch Regions to fetch. This should be the super set of all regions that this mapper should know.
-     *                       更新regin数组信息
+     *                       设置当前所有可用region
      */
     void setRegionsToFetch(String[] regionsToFetch);
 
     /**
      * Updates the mappings it has if they depend on an external source.
-     * 更新映射
+     * 刷新当前映射关系
      */
     void refreshMapping();
 }

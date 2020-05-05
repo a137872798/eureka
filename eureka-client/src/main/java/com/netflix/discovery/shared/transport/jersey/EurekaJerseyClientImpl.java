@@ -31,7 +31,7 @@ import org.apache.http.params.HttpParams;
 import static com.netflix.discovery.util.DiscoveryBuildInfo.buildVersion;
 
 /**
- * httpClient 的包装对象
+ * 适配对象
  * @author Tomasz Bak
  */
 public class EurekaJerseyClientImpl implements EurekaJerseyClient {
@@ -41,9 +41,18 @@ public class EurekaJerseyClientImpl implements EurekaJerseyClient {
     private static final int HTTPS_PORT = 443;
     private static final String KEYSTORE_TYPE = "JKS";
 
+    /**
+     * 该对象是 jersey封装的httpClient对象 内部还具备连接池的功能
+     */
     private final ApacheHttpClient4 apacheHttpClient;
+    /**
+     * 该对象负责清理空闲连接  还不知道内部是什么机制 先不管
+     */
     private final ApacheHttpClientConnectionCleaner apacheHttpClientConnectionCleaner;
 
+    /**
+     * 负责创建client时使用的配置  框架内部自带
+     */
     ClientConfig jerseyClientConfig;
 
     public EurekaJerseyClientImpl(int connectionTimeout, int readTimeout, final int connectionIdleTimeout,
@@ -56,6 +65,7 @@ public class EurekaJerseyClientImpl implements EurekaJerseyClient {
             HttpConnectionParams.setConnectionTimeout(params, connectionTimeout);
             HttpConnectionParams.setSoTimeout(params, readTimeout);
 
+            // 构建连接池清理对象
             this.apacheHttpClientConnectionCleaner = new ApacheHttpClientConnectionCleaner(apacheHttpClient, connectionIdleTimeout);
         } catch (Throwable e) {
             throw new RuntimeException("Cannot create Jersey client", e);

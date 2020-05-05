@@ -24,14 +24,13 @@ import java.util.concurrent.atomic.AtomicReference;
  *   on-demand update).
  *
  *   @author dliu
- *   该对象就是将自身同步到 注册中心
+ *
+ *  基于AP的实现 client 需要定期将自己的信息同步到 eureka-server
  */
 class InstanceInfoReplicator implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(InstanceInfoReplicator.class);
 
-    /**
-     * 维护了eurekaClient 实例对象
-     */
+
     private final DiscoveryClient discoveryClient;
     /**
      * 本机实例信息
@@ -66,7 +65,7 @@ class InstanceInfoReplicator implements Runnable {
      */
     private final int burstSize;
     /**
-     * 代表每分钟会消耗 多少令牌???
+     * 每分钟会产生多少令牌
      */
     private final int allowedRatePerMinute;
 
@@ -91,7 +90,7 @@ class InstanceInfoReplicator implements Runnable {
 
         this.started = new AtomicBoolean(false);
 
-        // 代表每分钟生成一个令牌
+        // 生成限流桶对象
         this.rateLimiter = new RateLimiter(TimeUnit.MINUTES);
         this.replicationIntervalSeconds = replicationIntervalSeconds;
         this.burstSize = burstSize;
@@ -110,7 +109,6 @@ class InstanceInfoReplicator implements Runnable {
             instanceInfo.setIsDirty();  // for initial register
             //开始启动定时任务
             Future next = scheduler.schedule(this, initialDelayMs, TimeUnit.SECONDS);
-            //这里为什么要用 原子引用来包裹 future 对象
             scheduledPeriodicRef.set(next);
         }
     }
@@ -137,12 +135,10 @@ class InstanceInfoReplicator implements Runnable {
     }
 
     /**
-     * 暂停本次任务并在之后重新执行  触发任务有2种情况 一种是定时任务的 后台自动触发 一种是 由外部手动触发 这里就是手动出发的逻辑
-     * 也就是 在 命令下执行更新操作
      * @return
      */
     public boolean onDemandUpdate() {
-        // 尝试获取令牌 如果没有获取到的情况下就不进行更新
+        // 避免该方法被频繁调用
         if (rateLimiter.acquire(burstSize, allowedRatePerMinute)) {
             if (!scheduler.isShutdown()) {
                 // 传入一个普通任务
@@ -151,15 +147,13 @@ class InstanceInfoReplicator implements Runnable {
                     public void run() {
                         logger.debug("Executing on-demand update of local InstanceInfo");
 
-                        // 发现存在 上个任务 也就是通过定时器触发的
+                        // 维护future的引用是为了可以提前关闭任务
                         Future latestPeriodic = scheduledPeriodicRef.get();
-                        // 关闭这个任务
                         if (latestPeriodic != null && !latestPeriodic.isDone()) {
                             logger.debug("Canceling the latest scheduled update, it will be rescheduled at the end of on demand update");
                             latestPeriodic.cancel(false);
                         }
 
-                        // 手动触发
                         InstanceInfoReplicator.this.run();
                     }
                 });
@@ -181,13 +175,13 @@ class InstanceInfoReplicator implements Runnable {
     @Override
     public void run() {
         try {
-            //刷新自身信息 一旦更新有效信息就将 instanceInfo 更新成dirty
+            // 刷新当前实例信息
             discoveryClient.refreshInstanceInfo();
 
-            //获取 dirty 时间 首次启动得到时候 就会将自身设置为dirty  同时只有 dirtyTimestamp 不为空的时候 才执行register() 方法 难道不更新情况是不进行心跳的???
+            // 代表实例发生了变化 那么就要将最新信息注册到eureka-server
             Long dirtyTimestamp = instanceInfo.isDirtyWithTime();
             if (dirtyTimestamp != null) {
-                //将自身注册到 eurekaServer 这里没有使用 register 的结果 也就是不在乎是否成功
+                // 将最新信息注册到eureka-server
                 discoveryClient.register();
                 //依据当前时间戳将 isDirty 修改成false
                 instanceInfo.unsetIsDirty(dirtyTimestamp);

@@ -60,7 +60,6 @@ public class EndpointUtils {
             if (instanceHashcode < 0) {
                 instanceHashcode = instanceHashcode * -1;
             }
-            // 好像将某个下标前的 实例移动到后面
             int backupInstance = instanceHashcode % listSize;
             for (int i = 0; i < backupInstance; i++) {
                 String zone = urlList.remove(0);
@@ -245,23 +244,20 @@ public class EndpointUtils {
      * @param instanceZone The zone in which the client resides
      * @param preferSameZone true if we have to prefer the same zone as the client, false otherwise
      * @return an (ordered) map of zone -> list of urls mappings, with the preferred zone first in iteration order
-     *      获取到 所有可以进行注册的 eurekaServce 的
      */
     public static Map<String, List<String>> getServiceUrlsMapFromConfig(EurekaClientConfig clientConfig, String instanceZone, boolean preferSameZone) {
-        //这里使用了 linkedHashMap 是有什么原因吗??  注意 这里传入了 Config 对象 整合 spring cloud 时 应该是解析yml 文件生成的
         Map<String, List<String>> orderedUrls = new LinkedHashMap<>();
-        //从配置文件中首先获取region 信息  一般情况下是 不设置的 也就是default
+        // 找到本节点所属region 默认是 us-east-1
         String region = getRegion(clientConfig);
-        //查询 该 region下所有可用的 zone
+        //查询 该 region下所有可用的 zone   默认 "defaultZone"
         String[] availZones = clientConfig.getAvailabilityZones(clientConfig.getRegion());
-        //如果没有找到可用的 zone 信息 使用一个default 的 zone  这里其实应该是异常情况了 因为一般定义在 defaultZone 的是注册中心的url 生成的 zone[]
-        //就会维护了一组url 信息
+
         if (availZones == null || availZones.length == 0) {
             availZones = new String[1];
             availZones[0] = DEFAULT_ZONE;
         }
         logger.debug("The availability zone for the given region {} are {}", region, availZones);
-        //获取 zone 的 下标
+        // 找到匹配的zone 对应的下标
         int myZoneOffset = getZoneOffset(instanceZone, preferSameZone, availZones);
 
         //获取到 合适的 zone 默认情况下返回第一个
@@ -348,7 +344,7 @@ public class EndpointUtils {
     public static Map<String, List<String>> getZoneBasedDiscoveryUrlsFromRegion(EurekaClientConfig clientConfig, String region) {
         String discoveryDnsName = null;
         try {
-            // 生成DNS name
+            // 有一个配置属性 记录了能够导向eureka-server 服务地址的 dns
             discoveryDnsName = "txt." + region + "." + clientConfig.getEurekaServerDNSName();
 
             logger.debug("The region url to be looked up is {} :", discoveryDnsName);
@@ -373,6 +369,7 @@ public class EndpointUtils {
                     zoneCnamesSet = new ArrayList<String>();
                     zoneCnameMapForRegion.put(zone, zoneCnamesSet);
                 }
+                // key 是 zone value 应该就是 该zone下所有可用的eureka-server
                 zoneCnamesSet.add(zoneCname);
             }
             return zoneCnameMapForRegion;
@@ -383,7 +380,7 @@ public class EndpointUtils {
 
     /**
      * Get the region that this particular instance is in.
-     *
+     *.
      * @return - The region in which the particular instance belongs to.
      * 从 config 中 剥离 region 属性
      */

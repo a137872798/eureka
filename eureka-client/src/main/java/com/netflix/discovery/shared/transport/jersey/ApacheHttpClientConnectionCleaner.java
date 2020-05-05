@@ -35,11 +35,15 @@ import org.slf4j.LoggerFactory;
 /**
  * A periodic process running in background cleaning Apache http client connection pool out of idle connections.
  * This prevents from accumulating unused connections in half-closed state.
+ * 该对象用于定时清理pool中空闲的连接
  */
 public class ApacheHttpClientConnectionCleaner {
 
     private static final Logger logger = LoggerFactory.getLogger(ApacheHttpClientConnectionCleaner.class);
 
+    /**
+     * 清理间隔时间
+     */
     private static final int HTTP_CONNECTION_CLEANER_INTERVAL_MS = 30 * 1000;
 
     private final ScheduledExecutorService eurekaConnCleaner =
@@ -55,8 +59,10 @@ public class ApacheHttpClientConnectionCleaner {
                 }
             });
 
+    // 该对象好像是实际发送请求的 Client 的包装对象  赋予了池化的功能 清理空闲连接也是通过该对象
     private final ApacheHttpClient4 apacheHttpClient;
 
+    // 下面2个对象是 netflix中用于统计的框架组件
     private final BasicTimer executionTimeStats;
     private final Counter cleanupFailed;
 
@@ -90,6 +96,10 @@ public class ApacheHttpClientConnectionCleaner {
         Monitors.unregisterObject(this);
     }
 
+    /**
+     * 核心的定时清理任务
+     * @param delayMs
+     */
     public void cleanIdle(long delayMs) {
         Stopwatch start = executionTimeStats.start();
         try {

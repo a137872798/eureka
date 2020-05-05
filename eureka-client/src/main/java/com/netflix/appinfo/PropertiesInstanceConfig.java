@@ -46,7 +46,6 @@ import static com.netflix.appinfo.PropertyBasedInstanceConfigConstants.*;
  * </p>
  *
  * @author Karthik Ranganathan
- * 该对象通过加载一个 配置文件 更新内部的配置如果 没有设置对应的属性 就从父类继承默认属性 且内部存在一个命名空间作为属性名的前缀
  */
 public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig implements EurekaInstanceConfig {
 
@@ -92,7 +91,7 @@ public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig im
         appGrpNameFromEnv = ConfigurationManager.getConfigInstance()
                 .getString(FALLBACK_APP_GROUP_KEY, Values.UNKNOWN_APPLICATION);
 
-        // 从eureka-client 文件中 加载配置并设置到 configInstance中  如果没有找到配置文件就会抛出异常  spring cloud 应该是做了适配了
+        // 生成动态配置工厂
         this.configInstance = Archaius1Utils.initConfig(CommonConstants.CONFIG_FILE_NAME);
     }
 

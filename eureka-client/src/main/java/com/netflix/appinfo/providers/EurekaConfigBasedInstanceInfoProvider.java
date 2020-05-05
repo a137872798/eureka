@@ -78,17 +78,18 @@ public class EurekaConfigBasedInstanceInfoProvider implements Provider<InstanceI
             if (instanceId == null || instanceId.isEmpty()) {
                 // 默认情况是  Myown
                 DataCenterInfo dataCenterInfo = config.getDataCenterInfo();
+                // 如果是亚马逊的数据中心 是会携带一个id的  也就是说如果某些实例没有设置id 且它们都属于亚马逊数据中心 它们会共用一个id
                 if (dataCenterInfo instanceof UniqueIdentifier) {
                     // 从数据中心获取 id
                     instanceId = ((UniqueIdentifier) dataCenterInfo).getId();
                 } else {
-                    // 如果是 普通配置 就直接获取本机host 否则 好像是从一个配置中心获取
+                    // 获取主机名 作为id
                     instanceId = config.getHostName(false);
                 }
             }
 
             String defaultAddress;
-            // 如果是 本地配置 也就是 MyDataCenter 就是 false
+            // 如果该配置是基于配置中心的  (内部携带一个配置中心实例 每当需要更新时触发refresh 从配置中心获取最新配置)
             if (config instanceof RefreshableInstanceConfig) {
                 // Refresh AWS data center info, and return up to date address
                 defaultAddress = ((RefreshableInstanceConfig) config).resolveDefaultAddress(false);

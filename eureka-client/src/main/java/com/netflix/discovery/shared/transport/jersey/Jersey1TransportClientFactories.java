@@ -17,7 +17,7 @@ import com.sun.jersey.api.client.filter.ClientFilter;
 import com.sun.jersey.client.apache4.ApacheHttpClient4;
 
 /**
- * 默认工厂
+ * 该对象可以根据给定的参数 构建 factory对象
  */
 public class Jersey1TransportClientFactories implements TransportClientFactories<ClientFilter> {
     @Deprecated
@@ -32,9 +32,11 @@ public class Jersey1TransportClientFactories implements TransportClientFactories
             }
         }
 
+        // 适配工厂
         final TransportClientFactory jerseyFactory = new JerseyEurekaHttpClientFactory(providedJerseyClient, false);
         final TransportClientFactory metricsFactory = MetricsCollectingEurekaHttpClient.createFactory(jerseyFactory);
 
+        // 将构建client的请求 转发到 metricsFactory
         return new TransportClientFactory() {
             @Override
             public EurekaHttpClient newClient(EurekaEndpoint serviceUrl) {
@@ -56,7 +58,7 @@ public class Jersey1TransportClientFactories implements TransportClientFactories
     }
 
     /**
-     * 返回一个 client 工厂对象
+     * 根据当前基础信息生成client对象  (创建client的起点就是该方法)
      * @param clientConfig
      * @param additionalFilters
      * @param myInstanceInfo

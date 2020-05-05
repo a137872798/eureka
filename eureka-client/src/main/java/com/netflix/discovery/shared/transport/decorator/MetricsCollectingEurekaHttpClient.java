@@ -39,7 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 对 client 增强一些 统计功能
+ * 对 client 增强一些 统计功能   装饰器模式
  * @author Tomasz Bak
  */
 public class MetricsCollectingEurekaHttpClient extends EurekaHttpClientDecorator {

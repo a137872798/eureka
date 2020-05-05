@@ -23,9 +23,6 @@ import com.netflix.discovery.shared.transport.decorator.EurekaHttpClientDecorato
  */
 public final class ServerStatusEvaluators {
 
-    /**
-     * 延迟评估
-     */
     private static final ServerStatusEvaluator LEGACY_EVALUATOR = new ServerStatusEvaluator() {
         @Override
         public boolean accept(int statusCode, RequestType requestType) {

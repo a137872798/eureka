@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * @author Tomasz Bak
+ * 非云环境的 数据中心
  */
 public class MyDataCenterInfo implements DataCenterInfo {
 

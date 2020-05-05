@@ -18,6 +18,7 @@ package com.netflix.discovery.shared.resolver;
 
 /**
  * @author Tomasz Bak
+ * 解析器工厂 通过该对象可以构建一个 用于解析出 EurekaEndpoint 的对象
  */
 public interface ClusterResolverFactory<T extends EurekaEndpoint> {
 

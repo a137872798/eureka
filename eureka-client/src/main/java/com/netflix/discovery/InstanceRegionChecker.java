@@ -31,7 +31,7 @@ public class InstanceRegionChecker {
     }
 
     /**
-     * 根据 instanceInfo 获取对应的region  看来是尝试从数据中心获取 默认是返回本地region
+     * 获取当前实例所属的 region
      * @param instanceInfo
      * @return
      */
@@ -43,7 +43,7 @@ public class InstanceRegionChecker {
 
             return localRegion;
         }
-        // 如果该instance 对应的 dataCenterName 是 amazon
+        // 亚马逊的忽略
         if (DataCenterInfo.Name.Amazon.equals(instanceInfo.getDataCenterInfo().getName())) {
             // 获取数据中心信息
             AmazonInfo amazonInfo = (AmazonInfo) instanceInfo.getDataCenterInfo();
@@ -56,7 +56,6 @@ public class InstanceRegionChecker {
             }
         }
 
-        // 默认情况是 返回 null
         return null;
     }
 

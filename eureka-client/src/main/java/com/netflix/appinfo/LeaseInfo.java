@@ -33,6 +33,8 @@ import com.thoughtworks.xstream.annotations.XStreamOmitField;
  *
  * @author Karthik Ranganathan, Greg Kim
  * 服务实例的  租约信息对象
+ * 看来这个实例注册 也和nacos-naming 一样是需要持续的发往注册中心  因为基于AP 的注册中心 数据并没有持久化 就容易丢失
+ * client挂了怎么办???
  */
 @JsonRootName("leaseInfo")
 public class LeaseInfo {
