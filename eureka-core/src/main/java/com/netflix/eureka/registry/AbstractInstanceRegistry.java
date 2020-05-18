@@ -690,7 +690,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     public void evict(long additionalLeaseMs) {
         logger.debug("Running the evict task");
 
-        // 启用过期功能的情况 才会进行扫描
+        // 禁用过期实例时 才需要走后面的逻辑   也就是针对没有续约的实例 根据配置可能会自动移除
         if (!isLeaseExpirationEnabled()) {
             logger.debug("DS: lease expiration is currently disabled.");
             return;

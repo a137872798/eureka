@@ -583,7 +583,8 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                 // Update threshold only if the threshold is greater than the
                 // current expected threshold or if self preservation is disabled.
                 //  根据条件更新续约数值
-                if ((count) > (serverConfig.getRenewalPercentThreshold() * expectedNumberOfClientsSendingRenews) || (!this.isSelfPreservationModeEnabled())) {
+                if (count > (serverConfig.getRenewalPercentThreshold() * expectedNumberOfClientsSendingRenews)
+                        || (!this.isSelfPreservationModeEnabled())) {
                     this.expectedNumberOfClientsSendingRenews = count;
                     updateRenewsPerMinThreshold();
                 }
