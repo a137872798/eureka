@@ -151,6 +151,7 @@ public final class EurekaHttpClients {
                 randomizer
         );
 
+        // 获取所有备选节点
         List<AwsEndpoint> initialValue = delegateResolver.getClusterEndpoints();
         if (initialValue.isEmpty()) {
             String msg = "Initial resolution of Eureka server endpoints failed. Check ConfigClusterResolver logs for more info";
@@ -158,6 +159,7 @@ public final class EurekaHttpClients {
             failFastOnInitCheck(clientConfig, msg);
         }
 
+        // 最终包装成一个异步解析器返回
         return new AsyncResolver<>(
                 EurekaClientNames.BOOTSTRAP,
                 delegateResolver,

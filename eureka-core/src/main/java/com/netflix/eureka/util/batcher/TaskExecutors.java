@@ -71,8 +71,9 @@ class TaskExecutors<ID, T> {
 
     static <ID, T> TaskExecutors<ID, T> batchExecutors(final String name,
                                                        int workerCount,
-                                                       final TaskProcessor<T> processor,
-                                                       final AcceptorExecutor<ID, T> acceptorExecutor) {
+                                                       final TaskProcessor<T> processor, // 该对象才是真正执行任务的
+                                                       final AcceptorExecutor<ID, T> acceptorExecutor // 该对象负责取出任务
+    ) {
         final AtomicBoolean isShutdown = new AtomicBoolean();
         final TaskExecutorMetrics metrics = new TaskExecutorMetrics(name);
         registeredMonitors.put(name, metrics);
@@ -145,6 +146,11 @@ class TaskExecutors<ID, T> {
         WorkerRunnable<ID, T> create(int idx);
     }
 
+    /**
+     * 一般情况实现 runnable 只需要执行它的执行逻辑run() 即可 该对象内部维护了 接收任务的队列 以及处理器 本身只做一个适配工作
+     * @param <ID>
+     * @param <T>
+     */
     abstract static class WorkerRunnable<ID, T> implements Runnable {
         final String workerName;
         final AtomicBoolean isShutdown;
@@ -169,6 +175,11 @@ class TaskExecutors<ID, T> {
         }
     }
 
+    /**
+     * 该对象负责处理批任务
+     * @param <ID>
+     * @param <T>
+     */
     static class BatchWorkerRunnable<ID, T> extends WorkerRunnable<ID, T> {
 
         BatchWorkerRunnable(String workerName,
@@ -183,9 +194,11 @@ class TaskExecutors<ID, T> {
         public void run() {
             try {
                 while (!isShutdown.get()) {
+                    // 获取到 聚集任务的线程 收集到的任务
                     List<TaskHolder<ID, T>> holders = getWork();
                     metrics.registerExpiryTimes(holders);
 
+                    // 对任务进行转换处理
                     List<T> tasks = getTasksOf(holders);
                     ProcessingResult result = processor.process(tasks);
                     switch (result) {
@@ -209,6 +222,7 @@ class TaskExecutors<ID, T> {
         }
 
         private List<TaskHolder<ID, T>> getWork() throws InterruptedException {
+            // 获取批任务队列  这时accepter内部的线程就会自动将数据转移到 workQueue中
             BlockingQueue<List<TaskHolder<ID, T>>> workQueue = taskDispatcher.requestWorkItems();
             List<TaskHolder<ID, T>> result;
             do {
@@ -226,6 +240,11 @@ class TaskExecutors<ID, T> {
         }
     }
 
+    /**
+     * 专门处理单任务
+     * @param <ID>
+     * @param <T>
+     */
     static class SingleTaskWorkerRunnable<ID, T> extends WorkerRunnable<ID, T> {
 
         SingleTaskWorkerRunnable(String workerName,

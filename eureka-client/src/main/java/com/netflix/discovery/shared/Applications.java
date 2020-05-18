@@ -283,7 +283,6 @@ public class Applications {
      */
     public void populateInstanceCountMap(Map<String, AtomicInteger> instanceCountMap) {
         for (Application app : this.getRegisteredApplications()) {
-            // 获取每个 app下所有的 instanceInfo  一个app 是对应一个 注册到eurekaServer 上的 eurekaClient 吗???
             for (InstanceInfo info : app.getInstancesAsIsFromEureka()) {
                 AtomicInteger instanceCount = instanceCountMap.computeIfAbsent(info.getStatus().name(),
                         k -> new AtomicInteger(0));
@@ -345,7 +344,7 @@ public class Applications {
     /**
      * 将实例数据打乱
      * @param filterUpInstances  是否只需要 UP 实例
-     * @param indexByRemoteRegions  按照 region 排序???
+     * @param indexByRemoteRegions  
      * @param remoteRegionsRegistry  将结果填充到该容器
      * @param clientConfig
      * @param instanceRegionChecker
@@ -357,17 +356,16 @@ public class Applications {
             @Nullable InstanceRegionChecker instanceRegionChecker) {
         Map<String, VipIndexSupport> secureVirtualHostNameAppMap = new HashMap<>();
         Map<String, VipIndexSupport> virtualHostNameAppMap = new HashMap<>();
-        // 遍历所有的  app
+        // eureka-server 返回的就是这样一个对象 内部已经填充了各种数据 并按照appName作为key存放
         for (Application application : appNameApplicationMap.values()) {
-            // 将应用中的 实例信息 打乱
+            // 将应用中的 实例信息 打乱  并将remoteRegions 所属的数据转移到map中
             if (indexByRemoteRegions) {
-                // 将本 applications 中的实例信息移动到了 remoteRegionsRegistry 中
                 application.shuffleAndStoreInstances(remoteRegionsRegistry, clientConfig, instanceRegionChecker);
             } else {
                 // 这里只是移除了 非 UP状态的 apps
                 application.shuffleAndStoreInstances(filterUpInstances);
             }
-            // 是否属于 vip 添加到对应的容器
+            // 如果info存在特殊信息 那么额外保存一份到对应容器
             this.addInstancesToVIPMaps(application, virtualHostNameAppMap, secureVirtualHostNameAppMap);
         }
         // 对2个 virtualHostName  也打乱
@@ -403,7 +401,7 @@ public class Applications {
     /**
      * Shuffle the instances and filter for only {@link InstanceStatus#UP} if
      * required.
-     * 打乱 实例信息
+     * 打乱实例信息
      */
     private void shuffleAndFilterInstances(Map<String, VipIndexSupport> srcMap, boolean filterUpInstances) {
 

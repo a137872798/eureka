@@ -36,8 +36,11 @@ public class ZoneAffinityClusterResolver implements ClusterResolver<AwsEndpoint>
 
     private static final Logger logger = LoggerFactory.getLogger(ZoneAffinityClusterResolver.class);
 
+    /**
+     * 该对象负责解析配置并获取本节点对应region下 所有zone的 eureka-server   主要是用于获取注册中心地址
+     */
     private final ClusterResolver<AwsEndpoint> delegate;
-    private final String myZone;
+    private final String myZone;   // 本节点对应zone  默认选择的eureka-server 会尽可能与它相同
     private final boolean zoneAffinity;
     private final EndpointRandomizer randomizer;
 
@@ -63,9 +66,11 @@ public class ZoneAffinityClusterResolver implements ClusterResolver<AwsEndpoint>
 
     @Override
     public List<AwsEndpoint> getClusterEndpoints() {
+        // 将节点分为2组 一组是相同zone  一组是其他
         List<AwsEndpoint>[] parts = ResolverUtils.splitByZone(delegate.getClusterEndpoints(), myZone);
         List<AwsEndpoint> myZoneEndpoints = parts[0];
         List<AwsEndpoint> remainingEndpoints = parts[1];
+        // 结合后 同zone的会放在前面
         List<AwsEndpoint> randomizedList = randomizeAndMerge(myZoneEndpoints, remainingEndpoints);
         if (!zoneAffinity) {
             Collections.reverse(randomizedList);

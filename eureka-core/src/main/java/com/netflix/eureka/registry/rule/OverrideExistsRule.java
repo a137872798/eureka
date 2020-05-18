@@ -11,6 +11,7 @@ import java.util.Map;
  * This rule checks to see if we have overrides for an instance and if we do then we return those.
  *
  * Created by Nikos Michalakis on 7/13/16.
+ * 该对象内部存储了 需要被修改的状态容器 当实例信息能找到对应的 overridden时 使用结果返回
  */
 public class OverrideExistsRule implements InstanceStatusOverrideRule {
 

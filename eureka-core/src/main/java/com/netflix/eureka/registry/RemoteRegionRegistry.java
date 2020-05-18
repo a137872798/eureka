@@ -69,7 +69,7 @@ import org.slf4j.LoggerFactory;
  * {@link com.netflix.discovery.DiscoveryClient}
  *
  * @author Karthik Ranganathan
- * 远端的注册中心 内部维护了 远端的url 和 httpClient 对象 通过 http请求获取远端信息
+ * 用于访问其他集群注册中心的对象
  */
 public class RemoteRegionRegistry implements LookupService<String> {
     private static final Logger logger = LoggerFactory.getLogger(RemoteRegionRegistry.class);
@@ -87,24 +87,28 @@ public class RemoteRegionRegistry implements LookupService<String> {
 
     private final ScheduledExecutorService scheduler;
     // monotonically increasing generation counter to ensure stale threads do not reset registry to an older version
+    // 代表第几次拉取 有点类似版本号的概念
     private final AtomicLong fetchRegistryGeneration = new AtomicLong(0);
     private final Lock fetchRegistryUpdateLock = new ReentrantLock();
 
+    /**
+     * 远端注册中心维护的应用实例
+     */
     private final AtomicReference<Applications> applications = new AtomicReference<Applications>(new Applications());
+    /**
+     * 维护最近一次增量数据
+     */
     private final AtomicReference<Applications> applicationsDelta = new AtomicReference<Applications>(new Applications());
     private final EurekaServerConfig serverConfig;
     private volatile boolean readyForServingData;
     private final EurekaHttpClient eurekaHttpClient;
 
-    /**
-     * 初始化远端注册对象 该对象是通过解析 配置文件生成的
-     */
     @Inject
-    public RemoteRegionRegistry(EurekaServerConfig serverConfig, // 本机作为 eurekaServer(注册中心) 的配置对象
-                                EurekaClientConfig clientConfig, // 本机作为 eurekaClient(能够注册到注册中心实例) 的配置对象
+    public RemoteRegionRegistry(EurekaServerConfig serverConfig,
+                                EurekaClientConfig clientConfig,
                                 ServerCodecs serverCodecs, // 编辑码器
                                 String regionName, // regionName
-                                URL remoteRegionURL // 远端url 可以是 多个 拼接
+                                URL remoteRegionURL // 该url 可能是多个地址通过 ";" 拼接
                                 ) {
         this.serverConfig = serverConfig;
         this.remoteRegionURL = remoteRegionURL;
@@ -151,16 +155,16 @@ public class RemoteRegionRegistry implements LookupService<String> {
         } catch (UnknownHostException e) {
             logger.warn("Cannot find localhost ip", e);
         }
-        // 生成唯一表示对象 并添加拦截器 填充 ip name id 等信息
+        // 用于定义该节点的唯一标识
         EurekaServerIdentity identity = new EurekaServerIdentity(ip);
         discoveryApacheClient.addFilter(new EurekaIdentityHeaderFilter(identity));
 
         // Configure new transport layer (candidate for injecting in the future)
         EurekaHttpClient newEurekaHttpClient = null;
         try {
-            // 生成集群解析对象 解析后只会返回一个 endpoint 就是 regionName remoteRegionURL 对应的endpoint
             ClusterResolver clusterResolver = StaticClusterResolver.fromURL(regionName, remoteRegionURL);
             // 创建client 对象 具备 定时重建连接 以及 失败重试功能
+            // 该对象每次尝试连接的地址都是从 clusterResolver中获取的 既然内部仅包含一个地址就能确保每次重试该client每次连接的都是同一个服务器
             newEurekaHttpClient = EurekaServerHttpClients.createRemoteRegionClient(
                     serverConfig, clientConfig.getTransportConfig(), serverCodecs, clusterResolver);
         } catch (Exception e) {
@@ -169,7 +173,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
         this.eurekaHttpClient = newEurekaHttpClient;
 
         try {
-            // 也就是 remoteRegionRegistry 对象在创建时 就会去对应的注册中心拉取数据了
+            // 尝试从远端注册中心拉取数据
             if (fetchRegistry()) {
                 // 拉取成功就修改该标识 代表 数据被成功拉取到
                 this.readyForServingData = true;
@@ -182,7 +186,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
         }
 
         // remote region fetch
-        // 创建一个拉取任务
+        // 创建一个拉取任务 定时同步远端的数据
         Runnable remoteRegionFetchTask = new Runnable() {
             @Override
             public void run() {
@@ -200,7 +204,6 @@ public class RemoteRegionRegistry implements LookupService<String> {
             }
         };
 
-        // 创建专门用于拉取任务的线程池对象
         ThreadPoolExecutor remoteRegionFetchExecutor = new ThreadPoolExecutor(
                 1, serverConfig.getRemoteRegionFetchThreadPoolSize(), 0, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());  // use direct handoff
 
@@ -210,7 +213,6 @@ public class RemoteRegionRegistry implements LookupService<String> {
                         .setDaemon(true)
                         .build());
 
-        // 执行定时任务 能够根据失败自动延迟访问
         scheduler.schedule(
                 new TimedSupervisorTask(
                         "RemoteRegionFetch_" + regionName,
@@ -227,6 +229,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
     /**
      * Check if this registry is ready for serving data.
      * @return true if ready, false otherwise.
+     * 是否准备完毕(当前注册中心能否使用)
      */
     public boolean isReadyForServingData() {
         return readyForServingData;
@@ -243,7 +246,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
 
         try {
             // If the delta is disabled or if it is the first time, get all applications
-            // 首次进入会 走上面
+            // 判断是否满足增量数据拉取的条件  不满足情况强制使用全量数据
             if (serverConfig.shouldDisableDeltaForRemoteRegions()
                     || (getApplications() == null)
                     || (getApplications().getRegisteredApplications().size() == 0)) {
@@ -253,7 +256,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
                 // 将全量数据保存到 本地
                 success = storeFullRegistry();
             } else {
-                // 拉取 delta 数据
+                // 仅拉取增量数据
                 success = fetchAndStoreDelta();
             }
             logTotalInstances();
@@ -269,7 +272,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
     }
 
     /**
-     * 这个是不是获取增量数据???
+     * 拉取增量数据 并保存到本地
      * @return
      * @throws Throwable
      */
@@ -287,7 +290,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
             logger.warn("Not updating delta as another thread is updating it already");
         }
 
-        // 可能是并发处理了 也可能是没拉取到数据
+        // 当没有获取到增量数据时 强制 拉取全量数据
         if (delta == null) {
             logger.warn("The server does not allow the delta revision to be applied because it is not "
                     + "safe. Hence got the full registry.");
@@ -299,6 +302,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
                 try {
                     // 将增量数据插入到 apps中
                     updateDelta(delta);
+                    // 此时重新计算 hashCode   实际上就是类似利用MD5快捷检测实例是否相等的一种策略
                     reconcileHashCode = getApplications().getReconcileHashCode();
                 } finally {
                     fetchRegistryUpdateLock.unlock();
@@ -308,6 +312,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
             }
 
             // There is a diff in number of instances for some reason
+            // 代表本次更新后数据还是不同 还需要再拉取
             if ((!reconcileHashCode.equals(delta.getAppsHashCode()))) {
                 return reconcileAndLogDifference(delta, reconcileHashCode);
             }
@@ -415,15 +420,13 @@ public class RemoteRegionRegistry implements LookupService<String> {
      * Fetch registry information from the remote region.
      * @param delta - true, if the fetch needs to get deltas, false otherwise
      * @return - response which has information about the data.
-     * 从远端拉取数据   delta = false 代表 执行getApplications 方法
      */
     private Applications fetchRemoteRegistry(boolean delta) {
         logger.info("Getting instance registry info from the eureka server : {} , delta : {}", this.remoteRegionURL, delta);
 
-        // 默认为false
+        // 默认为false  上下2套逻辑对应2个不同的client
         if (shouldUseExperimentalTransport()) {
             try {
-                // 这里将 发送http请求返回的结果 返回到上层
                 EurekaHttpResponse<Applications> httpResponse = delta ? eurekaHttpClient.getDelta() : eurekaHttpClient.getApplications();
                 int httpStatus = httpResponse.getStatusCode();
                 if (httpStatus >= 200 && httpStatus < 300) {
@@ -472,6 +475,7 @@ public class RemoteRegionRegistry implements LookupService<String> {
 
         long currentGeneration = fetchRegistryGeneration.get();
 
+        // 直接采用全量更新
         Applications apps = this.fetchRemoteRegistry(false);
         if (apps == null) {
             logger.error("The application is null for some reason. Not storing this information");

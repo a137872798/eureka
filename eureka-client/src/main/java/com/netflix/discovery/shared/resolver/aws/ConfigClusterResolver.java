@@ -88,6 +88,7 @@ public class ConfigClusterResolver implements ClusterResolver<AwsEndpoint> {
         // 默认返回第一个zone
         String myZone = InstanceInfo.getZone(availZones, myInstanceInfo);
 
+        // 查询当前节点所属region 下所有zone 以及 zone下对应的 eureka-server 地址   (key: zone, value: eureka-server-url)
         Map<String, List<String>> serviceUrls = EndpointUtils
                 // shouldPreferSameZoneEureka 代表优先使用同一zone 这样能够尽可能提升性能
                 .getServiceUrlsMapFromConfig(clientConfig, myZone, clientConfig.shouldPreferSameZoneEureka());

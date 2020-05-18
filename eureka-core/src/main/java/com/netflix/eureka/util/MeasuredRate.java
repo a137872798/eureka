@@ -41,7 +41,7 @@ public class MeasuredRate {
     private final AtomicLong currentBucket = new AtomicLong(0);
 
     /**
-     * 获取样本的时间间隔???
+     * 采样间隔
      */
     private final long sampleInterval;
     /**
@@ -67,7 +67,7 @@ public class MeasuredRate {
     }
 
     /**
-     * 启动定时任务
+     * 启动定时任务  每隔一定时间进行采样
      */
     public synchronized void start() {
         if (!isActive) {
@@ -77,7 +77,6 @@ public class MeasuredRate {
                 public void run() {
                     try {
                         // Zero out the current bucket.
-                        // 该数值用来更新 lastBucket 的值
                         lastBucket.set(currentBucket.getAndSet(0));
                     } catch (Throwable e) {
                         logger.error("Cannot reset the Measured Rate", e);
@@ -98,7 +97,7 @@ public class MeasuredRate {
 
     /**
      * Returns the count in the last sample interval.
-     * 获取当前的桶数
+     * 返回上一个样本的数量
      */
     public long getCount() {
         return lastBucket.get();

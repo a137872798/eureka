@@ -14,10 +14,16 @@ import java.util.Map;
 
 /**
  * @author Tomasz Bak
- * 代表注册中心上的一个 实例对象 也就是 具备 注册 续约 剔除 注销 能力
+ * 对应注册中心本身  内嵌在eureka-server上
+ * 本身还实现了 续约管理器 和 查找服务接口
  */
 public interface InstanceRegistry extends LeaseManager<InstanceInfo>, LookupService<String> {
 
+    /**
+     * 启动注册中心 允许其他client发送请求到本节点
+     * @param applicationInfoManager
+     * @param count
+     */
     void openForTraffic(ApplicationInfoManager applicationInfoManager, int count);
 
     /**
@@ -36,20 +42,38 @@ public interface InstanceRegistry extends LeaseManager<InstanceInfo>, LookupServ
      */
     void storeOverriddenStatusIfRequired(String appName, String id, InstanceStatus overriddenStatus);
 
+    /**
+     * 更新实例状态 并根据 isReplication 判断本请求是否要同步到集群其他节点
+     * @param appName
+     * @param id
+     * @param newStatus
+     * @param lastDirtyTimestamp
+     * @param isReplication
+     * @return
+     */
     boolean statusUpdate(String appName, String id, InstanceStatus newStatus,
                          String lastDirtyTimestamp, boolean isReplication);
 
+    /**
+     * 将某个变更的状态删除
+     * @param appName
+     * @param id
+     * @param newStatus
+     * @param lastDirtyTimestamp
+     * @param isReplication
+     * @return
+     */
     boolean deleteStatusOverride(String appName, String id, InstanceStatus newStatus,
                                  String lastDirtyTimestamp, boolean isReplication);
 
     /**
-     * 获取服务实例状态 更新快照
+     * 获取服务实例当前将要重置的状态快照
      * @return
      */
     Map<String, InstanceStatus> overriddenInstanceStatusesSnapshot();
 
     /**
-     * 只获取本地的服务实例
+     * 仅获取本region的应用实例
      * @return
      */
     Applications getApplicationsFromLocalRegionOnly();
@@ -62,19 +86,18 @@ public interface InstanceRegistry extends LeaseManager<InstanceInfo>, LookupServ
 
     /**
      * Get application information.
-     * 根据 是否携带 其他区域的 服务 通过appName 获取服务实例
      *
      * @param appName The name of the application
      * @param includeRemoteRegion true, if we need to include applications from remote regions
      *                            as indicated by the region {@link java.net.URL} by this property
      *                            {@link com.netflix.eureka.EurekaServerConfig#getRemoteRegionUrls()}, false otherwise
      * @return the application
+     * 通过指定appName的方式 查找所有的实例 通过 includeRemoteRegion决定是否包含其他region的实例
      */
     Application getApplication(String appName, boolean includeRemoteRegion);
 
     /**
      * Gets the {@link InstanceInfo} information.
-     * 通过id 获取服务实例信息
      *
      * @param appName the application name for which the information is requested.
      * @param id the unique identifier of the instance.
@@ -84,7 +107,6 @@ public interface InstanceRegistry extends LeaseManager<InstanceInfo>, LookupServ
 
     /**
      * Gets the {@link InstanceInfo} information.
-     * 通过服务实例id  以及是否包含远程地区的 服务 获取服务实例信息
      *
      * @param appName the application name for which the information is requested.
      * @param id the unique identifier of the instance.
@@ -135,6 +157,10 @@ public interface InstanceRegistry extends LeaseManager<InstanceInfo>, LookupServ
      */
     boolean isLeaseExpirationEnabled();
 
+    /**
+     * 是否开启自我保护模式
+     * @return
+     */
     boolean isSelfPreservationModeEnabled();
 
 }

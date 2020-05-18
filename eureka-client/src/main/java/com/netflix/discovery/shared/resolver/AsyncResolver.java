@@ -34,11 +34,11 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
     // Note that warm up is best effort. If the resolver is accessed by multiple threads pre warmup,
     // only the first thread will block for the warmup (up to the configurable timeout).
     /**
-     * 是否已经开始预热
+     * 是否已经预热完成
      */
     private final AtomicBoolean warmedUp = new AtomicBoolean(false);
     /**
-     * 是否开始计时
+     * 是否以启动计时器
      */
     private final AtomicBoolean scheduled = new AtomicBoolean(false);
 
@@ -143,7 +143,7 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
                         .build()
         );
 
-        // 这里把线程池对象带入到 Task中
+        // 统计对象  忽略
         this.backgroundTask = new TimedSupervisorTask(
                 this.getClass().getSimpleName(),
                 executorService,
@@ -232,7 +232,7 @@ public class AsyncResolver<T extends EurekaEndpoint> implements ClosableResolver
     }
 
     /**
-     * 在后台执行获取 endpoint 的任务
+     * 每隔一段时间 重新解析当前备选的注册中心地址
      */
     private final Runnable updateTask = new Runnable() {
         @Override

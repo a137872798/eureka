@@ -44,10 +44,12 @@ public class TaskDispatchers {
                                                                              long congestionRetryDelayMs,
                                                                              long networkFailureRetryMs,
                                                                              TaskProcessor<T> taskProcessor) {
+        // 该对象基于生产者消费者模式  会将外部存入队列的任务 集中到2个任务队列中 并交由 taskProcessor处理
         final AcceptorExecutor<ID, T> acceptorExecutor = new AcceptorExecutor<>(
                 id, maxBufferSize, workloadSize, maxBatchingDelay, congestionRetryDelayMs, networkFailureRetryMs
         );
         final TaskExecutors<ID, T> taskExecutor = TaskExecutors.batchExecutors(id, workerCount, taskProcessor, acceptorExecutor);
+        // 通过一个包装对象包装后返回
         return new TaskDispatcher<ID, T>() {
             @Override
             public void process(ID id, T task, long expiryTime) {

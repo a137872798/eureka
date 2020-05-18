@@ -6,7 +6,7 @@ import com.netflix.appinfo.InstanceInfo;
 import com.netflix.eureka.registry.PeerAwareInstanceRegistryImpl.Action;
 
 /**
- * 重复对象实例
+ * 记录某个应用实例信息 基于AP 实现的核心就是将注册请求转发到 注册中心集群所有节点上  该类就是转发的pojo
  * The jersey resource class that generates a particular replication event
  */
 public class ReplicationInstance {

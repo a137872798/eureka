@@ -7,12 +7,12 @@ import javax.annotation.Nullable;
 import java.util.Arrays;
 
 /**
- * key 代表能唯一标识某一client 的对象 Value 为 服务信息
+ * 这些信息确定了 返回给 client的某种状态    缓存是按这个维度划分的
  */
 public class Key {
 
     /**
-     * 代表 对应的 value 是使用 json 还是 xml进行编解码
+     * 对应响应体的类型
      */
     public enum KeyType {
         JSON, XML
@@ -20,15 +20,16 @@ public class Key {
 
     /**
      * An enum to define the entity that is stored in this cache for this key.
+     * 代表本次存储的数据是普通的应用实例数据 还是VIP 数据 或者 SVIP(在VIP的层面增加了security)
      */
     public enum EntityType {
         Application, VIP, SVIP
     }
 
-    /**
-     * 在VIPResource 中 作为 vipAddress
-     */
     private final String entityName;
+    /**
+     * 允许为 缓存键设置地区信息
+     */
     private final String[] regions;
     private final KeyType requestType;
     /**

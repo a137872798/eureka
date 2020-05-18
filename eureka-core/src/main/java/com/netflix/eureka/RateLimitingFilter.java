@@ -100,11 +100,13 @@ public class RateLimitingFilter implements Filter {
 
     /**
      * Includes both full and delta fetches.
+     * 同时针对增量数据和全量数据的限流
      */
     private static final RateLimiter registryFetchRateLimiter = new RateLimiter(TimeUnit.SECONDS);
 
     /**
      * Only full registry fetches.
+     * 仅针对拉取全量数据限流
      */
     private static final RateLimiter registryFullFetchRateLimiter = new RateLimiter(TimeUnit.SECONDS);
 

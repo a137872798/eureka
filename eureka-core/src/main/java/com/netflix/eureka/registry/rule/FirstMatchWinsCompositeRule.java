@@ -11,10 +11,12 @@ import java.util.List;
  * result of the {@link AlwaysMatchInstanceStatusRule}.
  *
  * Created by Nikos Michalakis on 7/13/16.
- * overrideStatus 匹配对象
  */
 public class FirstMatchWinsCompositeRule implements InstanceStatusOverrideRule {
 
+    /**
+     * 该对象内部组合了一系列的 rule 哪个先匹配成功了就使用哪个
+     */
     private final InstanceStatusOverrideRule[] rules;
     private final InstanceStatusOverrideRule defaultRule;
     private final String compositeRuleName;
@@ -27,6 +29,7 @@ public class FirstMatchWinsCompositeRule implements InstanceStatusOverrideRule {
         for (int i = 0; i < rules.length; ++i) {
             ruleNames.add(rules[i].toString());
         }
+        // 用一个默认的策略来兜底
         ruleNames.add(defaultRule.toString());
         compositeRuleName = ruleNames.toString();
     }

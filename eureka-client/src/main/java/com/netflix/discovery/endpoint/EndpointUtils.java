@@ -76,7 +76,6 @@ public class EndpointUtils {
      * @param randomizer a randomizer to randomized returned urls, if loading from dns
      *
      * @return The list of all eureka service urls for the eureka client to talk to.
-     * 通过客户端配置信息 选择的zone和随机数生成器获取 注册中心的 url 列表
      */
     public static List<String> getDiscoveryServiceUrls(EurekaClientConfig clientConfig, String zone, ServiceUrlRandomizer randomizer) {
         boolean shouldUseDns = clientConfig.shouldUseDnsForFetchingServiceUrls();
@@ -84,7 +83,7 @@ public class EndpointUtils {
             // dns 的不看
             return getServiceUrlsFromDNS(clientConfig, zone, clientConfig.shouldPreferSameZoneEureka(), randomizer);
         }
-        // 从配置文件中获取 注册中心url   shouldPreferSameZoneEureka() 是否倾向于选择相同zone 的eureka 服务器
+        // 从配置中心找到目标zone下所有可用的eureka-server 地址
         return getServiceUrlsFromConfig(clientConfig, zone, clientConfig.shouldPreferSameZoneEureka());
     }
 
@@ -195,7 +194,7 @@ public class EndpointUtils {
      * @param instanceZone The zone in which the client resides
      * @param preferSameZone true if we have to prefer the same zone as the client, false otherwise
      * @return The list of all eureka service urls for the eureka client to talk to
-     * 从配置文件中获取 所有 注册中心的url  perferSameZone 代表是否期望选择同一zone 的数据
+     * 从配置文件中获取 所有 注册中心的url  preferSameZone 代表是否期望选择同一zone 的数据
      */
     public static List<String> getServiceUrlsFromConfig(EurekaClientConfig clientConfig, String instanceZone, boolean preferSameZone) {
         List<String> orderedUrls = new ArrayList<String>();
@@ -210,14 +209,15 @@ public class EndpointUtils {
         }
         logger.debug("The availability zone for the given region {} are {}", region, availZones);
 
-        // instanceZone 就是从对应 config上获取 zone 的信息 照理说这个和 上面的  availzones 应该是一样的 (不对 这个zone 是从返回的列表中默认选中第一个)
+        // 如果采用地区亲和策略 那么找到与 instanceZone 相同的 zone 所在的数组下标
         int myZoneOffset = getZoneOffset(instanceZone, preferSameZone, availZones);
 
+        // 找到该zone 下所有eureka-server地址
         List<String> serviceUrls = clientConfig.getEurekaServerServiceUrls(availZones[myZoneOffset]);
         if (serviceUrls != null) {
             orderedUrls.addAll(serviceUrls);
         }
-        // 如果下标是2 长度为4 就不会加入所有的 url 了 这个有什么意义吗???
+        //将剩余可用的zone 对应的所有eureka-server地址也添加进去 优先使用同一zone下的地址 失败时才会使用其他zone的地址
         int currentOffset = myZoneOffset == (availZones.length - 1) ? 0 : (myZoneOffset + 1);
         while (currentOffset != myZoneOffset) {
             serviceUrls = clientConfig.getEurekaServerServiceUrls(availZones[currentOffset]);
@@ -260,19 +260,18 @@ public class EndpointUtils {
         // 找到匹配的zone 对应的下标
         int myZoneOffset = getZoneOffset(instanceZone, preferSameZone, availZones);
 
-        //获取到 合适的 zone 默认情况下返回第一个
+        //获取到 合适的 zone
         String zone = availZones[myZoneOffset];
-        // 找到 该 zone 的 全部 注册中心(eurekaServer)  也就是 service-url:default-zone 对应的值 也就是每台机器 都会在service-url: default-zone 中设置 注册中心的地址 而zone 代表访问的注册中心属于哪个zone
-        // 之后就会优先选择匹配的zone 进行访问
+        // 找到目标zone下所有eureka-server 的地址
         List<String> serviceUrls = clientConfig.getEurekaServerServiceUrls(zone);
         if (serviceUrls != null) {
             //按照顺序 加入到 map 中
             orderedUrls.put(zone, serviceUrls);
         }
-        // 如果长度为1 加入该zone 全部url 否则返回2个 zone 间所有url (第二个zone 代表最后一个 区域)
+
         int currentOffset = myZoneOffset == (availZones.length - 1) ? 0 : (myZoneOffset + 1);
         while (currentOffset != myZoneOffset) {
-            //如果下标 不对应 那么 会将 每个zone 中 注册中心url 全部加入
+            // 如果本节点所属region 下有多个zone   将其他zone 以及下面可用的eureka-server 地址也添加到容器中
             zone = availZones[currentOffset];
             serviceUrls = clientConfig.getEurekaServerServiceUrls(zone);
             if (serviceUrls != null) {
@@ -401,7 +400,7 @@ public class EndpointUtils {
 
     /**
      * Gets the zone to pick up for this instance.
-     * 通过指定算法 挑选合适的 注册中心(eurekaServer)实例对象
+     * 倾向于选择同一zone的eureka-server
      *
      * @param myZone client 所在的zone列表中的第一个zone
      * @param preferSameZone 是否倾向于使用同一zone

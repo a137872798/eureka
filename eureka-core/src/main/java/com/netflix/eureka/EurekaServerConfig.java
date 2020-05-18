@@ -35,7 +35,7 @@ import com.netflix.eureka.aws.AwsBindingStrategy;
  * </p>
  *
  * @author Karthik Ranganathan
- * eureka 客户端配置对象
+ * eureka 服务器配置对象
  */
 public interface EurekaServerConfig {
 

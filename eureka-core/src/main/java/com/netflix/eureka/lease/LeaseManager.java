@@ -39,7 +39,6 @@ public interface LeaseManager<T> {
 
     /**
      * Assign a new {@link Lease} to the passed in {@link T}.
-     * 具备将自身信息 注册到 eurekaServer 上的能力
      *
      * @param r
      *            - T to register

@@ -366,6 +366,7 @@ public interface EurekaClientConfig {
      *
      * @return true to enable fetching delta information for registry, false to
      *         get the full registry.
+     *         是否禁用拉取增量数据 如果该标识为true 那么每次都会拉取全量数据
      */
     boolean shouldDisableDelta();
 

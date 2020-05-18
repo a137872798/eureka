@@ -54,7 +54,7 @@ public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig im
      */
     protected final String namespace;
     /**
-     * 动态属性工厂
+     * 动态属性工厂 实际上是基于eureka-client 这一端
      */
     protected final DynamicPropertyFactory configInstance;
     private String appGrpNameFromEnv;
@@ -87,7 +87,7 @@ public abstract class PropertiesInstanceConfig extends AbstractInstanceConfig im
                 ? namespace
                 : namespace + ".";
 
-        // 默认组是 unkown
+        // 本实例归属于哪个app
         appGrpNameFromEnv = ConfigurationManager.getConfigInstance()
                 .getString(FALLBACK_APP_GROUP_KEY, Values.UNKNOWN_APPLICATION);
 

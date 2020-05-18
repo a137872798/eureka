@@ -98,7 +98,6 @@ public class ApplicationsResource {
      *            the unique application identifier (which is the name) of the
      *            application.
      * @return information about a particular application.
-     * 这个controller 还能滋生其他controller ???  看来是 生成针对某个 App 的 controller 对象 提供了针对该 app 的 crud
      */
     @Path("{appId}")
     public ApplicationResource getApplicationResource(
@@ -135,6 +134,7 @@ public class ApplicationsResource {
                                   @HeaderParam(EurekaAccept.HTTP_X_EUREKA_ACCEPT) String eurekaAccept,
                                   @Context UriInfo uriInfo,
                                   // 是否有指定 region 要注意每个查询都是可以携带 region 的 这样只会返回 该region 下的 app 信息
+                                  // 并且该值是允许传空的
                                   @Nullable @QueryParam("regions") String regionsStr) {
 
         boolean isRemoteRegionRequested = null != regionsStr && !regionsStr.isEmpty();
@@ -150,6 +150,7 @@ public class ApplicationsResource {
         // Check if the server allows the access to the registry. The server can
         // restrict access if it is not1/
         // ready to serve traffic depending on various reasons.
+        // 本节点未准备好数据  或者远端节点未准备好数据 就返回 403 这样discoveryClient 会自动切换节点
         if (!registry.shouldAllowAccess(isRemoteRegionRequested)) {
             return Response.status(Status.FORBIDDEN).build();
         }
@@ -161,6 +162,7 @@ public class ApplicationsResource {
             returnMediaType = MediaType.APPLICATION_XML;
         }
 
+        // 这里主要是生成缓存
         Key cacheKey = new Key(Key.EntityType.Application,
                 ResponseCacheImpl.ALL_APPS,
                 keyType, CurrentRequestVersion.get(), EurekaAccept.fromString(eurekaAccept), regions

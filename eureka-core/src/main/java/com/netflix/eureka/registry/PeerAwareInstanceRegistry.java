@@ -40,7 +40,7 @@ public interface PeerAwareInstanceRegistry extends InstanceRegistry {
      * Populates the registry information from a peer eureka node. This
      * operation fails over to other nodes until the list is exhausted if the
      * communication fails.
-     * 将对端节点的信息 填充到注册表中 如果失败就 轮询到下个节点 直到所有节点都失败
+     * 与集群中其他节点的数据进行同步
      */
     int syncUp();
 

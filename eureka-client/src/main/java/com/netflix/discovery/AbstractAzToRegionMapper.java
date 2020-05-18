@@ -63,18 +63,17 @@ public abstract class AbstractAzToRegionMapper implements AzToRegionMapper {
 
     /**
      * @param regionsToFetch Regions to fetch. This should be the super set of all regions that this mapper should know.
-     *                       这里设置了待拉取的某个region   (会拉取到下面的availableZone吧)
-     *                       这个region是从哪来的
+     *
      */
     @Override
     public synchronized void setRegionsToFetch(String[] regionsToFetch) {
         if (null != regionsToFetch) {
             this.regionsToFetch = regionsToFetch;
             logger.info("Fetching availability zone to region mapping for regions {}", (Object) regionsToFetch);
-            // 清除之前维护的 可用zone 到 region 的映射关系
+            // 因为设置了新的region信息 所以清空之前的映射关系
             availabilityZoneVsRegion.clear();
             for (String remoteRegion : regionsToFetch) {
-                // 根据 region 获取 可用zone
+                // 从配置文件中找到 该region 可用的zone
                 Set<String> availabilityZones = getZonesForARegion(remoteRegion);
                 // 如果不存在可用zone 或者 zone 为 defaultZone
                 if (null == availabilityZones

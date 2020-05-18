@@ -9,15 +9,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.netflix.discovery.provider.Serializer;
 
 /**
- * 内部维护了 多个 重复任务对象
+ * 内部维护了 多个ReplicationInstance
  * @author Tomasz Bak
  */
 @Serializer("jackson") // For backwards compatibility with DiscoveryJerseyProvider
 public class ReplicationList {
 
-    /**
-     * 重复对象实例列表
-     */
     private final List<ReplicationInstance> replicationList;
 
     public ReplicationList() {

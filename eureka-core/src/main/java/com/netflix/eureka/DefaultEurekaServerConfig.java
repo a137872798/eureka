@@ -110,7 +110,6 @@ public class DefaultEurekaServerConfig implements EurekaServerConfig {
         ConfigurationManager.getConfigInstance().setProperty(
                 ARCHAIUS_DEPLOYMENT_ENVIRONMENT, env);
 
-        // 获取eureka 环境文件名 默认叫 eureka-server
         String eurekaPropsFile = EUREKA_PROPS_FILE.get();
         try {
             // ConfigurationManager
@@ -518,6 +517,7 @@ public class DefaultEurekaServerConfig implements EurekaServerConfig {
             return Collections.emptyMap();
         }
 
+        // regionName1；regionUrl1,regionName2;regionUrl2
         String[] remoteRegionUrlWithNamePairs = remoteRegionUrlWithNameString.split(",");
         Map<String, String> toReturn = new HashMap<String, String>(remoteRegionUrlWithNamePairs.length);
 

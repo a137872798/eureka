@@ -62,7 +62,7 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim, David Liu
- * 无论 eurekaServer eurekaClient 都可以将自身注册到 eurekaServer 上所有都有一个clientConfig 对象
+ * 该对象作为整个 eureka启动的引导程序 它实现于 ServletContextListener 接口
  */
 public class EurekaBootStrap implements ServletContextListener {
     private static final Logger logger = LoggerFactory.getLogger(EurekaBootStrap.class);
@@ -81,7 +81,7 @@ public class EurekaBootStrap implements ServletContextListener {
     private static final String EUREKA_DATACENTER = "eureka.datacenter";
 
     /**
-     * eurekaServer 的生命周期对象
+     * 该对象作为一个统一的协调工具 内部包含多个核心组件
      */
     protected volatile EurekaServerContext serverContext;
     /**
@@ -90,7 +90,7 @@ public class EurekaBootStrap implements ServletContextListener {
     protected volatile AwsBinder awsBinder;
 
     /**
-     * server 具备client 的职能是因为 在云环境下 他也是 配置中心的 client 也可能它会访问其他server 这样他就是一个 client
+     * 这个client 实际上就是 DiscoveryClient  根据配置的情况 定期从注册中心拉取数据 以及定期为自身续约
      */
     private EurekaClient eurekaClient;
 
@@ -105,6 +105,7 @@ public class EurekaBootStrap implements ServletContextListener {
      * Construct an instance of eureka bootstrap with the supplied eureka client
      * 
      * @param eurekaClient the eureka client to bootstrap
+     *                     注意这里可以通过一个client来初始化
      */
     public EurekaBootStrap(EurekaClient eurekaClient) {
         this.eurekaClient = eurekaClient;
@@ -119,7 +120,8 @@ public class EurekaBootStrap implements ServletContextListener {
     @Override
     public void contextInitialized(ServletContextEvent event) {
         try {
-            // 当受到 servlet 启动的事件时
+            // 初始化eureka环境  推测是这样 在配置中心中还包含类似namespace的概念 当启动eureka时从指定的命名空间中获取Configuration 之后每个 配置的属性都是
+            // 基于该命名空间的
             initEurekaEnvironment();
             // 初始化 eurekaServerContext 对象
             initEurekaServerContext();
@@ -135,7 +137,7 @@ public class EurekaBootStrap implements ServletContextListener {
 
     /**
      * Users can override to initialize the environment themselves.
-     * 初始化 eureka 环境
+     * 当感知到servlet环境被搭建时 初始化  eureka环境
      */
     protected void initEurekaEnvironment() throws Exception {
         logger.info("Setting the eureka configuration..");
@@ -159,47 +161,50 @@ public class EurekaBootStrap implements ServletContextListener {
 
     /**
      * init hook for server context. Override for custom logic.
-     * 创建 属于 eureka 的 Context 对象
+     * eureka上下文对象本身包含了一系列启动必备的组件
      */
     protected void initEurekaServerContext() throws Exception {
-        // 创建默认的 server Config 对象 通过读取 eureka-server 文件
+        // 这里简单的理解为就是通过某种方式 获取到配置中心的配置
         EurekaServerConfig eurekaServerConfig = new DefaultEurekaServerConfig();
 
         // For backward compatibility
-        // 应该是给 xml / json 添加转换器  就是 如果info 对象没有status 默认返回DOWN
+        // 注册了有关XML/JSON的转换器
         JsonXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
         XmlXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
 
         logger.info("Initializing the eureka client...");
         logger.info(eurekaServerConfig.getJsonCodecName());
-        // 创建默认的编解码器 具体如何实现先不看
+        // 写入编解码器 负责将数据体变成 JSON/XML 格式  (压缩及非压缩)
         ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
 
         ApplicationInfoManager applicationInfoManager = null;
 
-        // 一开始应该是还没创建的
+        // 可以选择在初始化时 传入client  或者不传入  如果不传入会在此时创建
         if (eurekaClient == null) {
-            // 从配置中心获取配置 或者生成本地对象 该对象只能获取到 最上层的默认属性而不是从 配置文件中读取
+            // 初始化本节点作为eureka-client的相关配置
             EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
                     ? new CloudInstanceConfig()
                     : new MyDataCenterInstanceConfig();
 
-            // 后面的provider 对象可以通过 config 构建 instanceInfo 对象
+            // manager对象负责管理instance本身
             applicationInfoManager = new ApplicationInfoManager(
-                    instanceConfig, new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
+                    instanceConfig,
+                    // 通过config中相关属性 初始化instance 对象
+                    new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
 
-            // 生成默认的 clientConfig  对象 应该会从 eureka-client文件中读取数据(前提是存在该文件) 具体解析配置的逻辑先不看 如果没有该配置文件
-            // 会吞掉异常并打印日志 提示找不到 配置文件
+            // 读取client的配置
             EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
-            // 使用InstanceInfo 和  配置对象生成  client 启动后就会从默认的 region 开始拉取服务实例列表 和将自身注册到 eurekaServer
+            // 初始化服务发现client  定期从注册中心拉取最新数据  注册中心地址的选择机制是这样  先根据client所在的 region
+            // 找到region下所有的zone  并且拉取zone下所有节点url 作为一个备选地址  之后有一个地区亲和的对象尽可能的将同一zone的地址排在前面
+            // 在往上是一个异步解析器 会定期从配置中心拉取最新地址列表
             eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig);
         } else {
             applicationInfoManager = eurekaClient.getApplicationInfoManager();
         }
 
-        // 生成同级的 注册中心对象
+        // 默认情况下本节点不仅作为  eureka-client 向注册中心注册实例 同时还作为一个eureka-server 接收其他节点的注册请求
         PeerAwareInstanceRegistry registry;
-        // info 对象是通过抽取 eureka-client 配置文件中信息生成的 这里可以根据配置中的信息判断是否是 Aws
+        // 亚马逊云相关的忽略
         if (isAws(applicationInfoManager.getInfo())) {
             registry = new AwsInstanceRegistry(
                     eurekaServerConfig,
@@ -210,7 +215,7 @@ public class EurekaBootStrap implements ServletContextListener {
             awsBinder = new AwsBinderDelegate(eurekaServerConfig, eurekaClient.getEurekaClientConfig(), registry, applicationInfoManager);
             awsBinder.start();
         } else {
-            // 默认情况  该对象具备将请求转发到下面所有nodes 的能力
+            // 开始初始化 集群同步对象  往该节点发送的请求根据情况会自动转发到集群内其他节点
             registry = new PeerAwareInstanceRegistryImpl(
                     // 该对象内 维护了 eureka-server 的信息
                     eurekaServerConfig,
@@ -221,7 +226,7 @@ public class EurekaBootStrap implements ServletContextListener {
             );
         }
 
-        // 获取同级节点对象
+        // 此时 nodes 内部的 List<node> 还没有初始化
         PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(
                 registry,
                 eurekaServerConfig,
@@ -230,7 +235,7 @@ public class EurekaBootStrap implements ServletContextListener {
                 applicationInfoManager
         );
 
-        // 生成上下文对象
+        // 该对象负责统一管理 eureka相关组件的生命周期
         serverContext = new DefaultEurekaServerContext(
                 eurekaServerConfig,
                 serverCodecs,
@@ -242,14 +247,13 @@ public class EurekaBootStrap implements ServletContextListener {
         // 设置到静态变量中
         EurekaServerContextHolder.initialize(serverContext);
 
-        // 这里会完成上述 组件的初始化工作 比如 定期从配置文件中拉取 node 节点信息
         serverContext.initialize();
         logger.info("Initialized server context");
 
         // Copy registry from neighboring eureka node
-        // 把从 discoveryClient 拉取到的实例信息中属于localRegion 的信息 注册到自身（自身本就作为一个注册中心）谁来做续约???
+        // 当注册中心启动完成时第一步是想到从本集群中其他节点同步数据
         int registryCount = registry.syncUp();
-        // 开启注册中心运输 就是将本实例上线 并通知监听器  在本实例没有设置成UP状态时是不能被其他client监测到的 同时开启自身的 续约检测 就是将没有定期续约的剔除
+        // 将本节点标记成可用 也就是能被集群访问到  否则 当尝试从该节点获取实例信息时很可能返回false  (还要看那个empty标识设置的时间是否超过一个等待时间)
         registry.openForTraffic(applicationInfoManager, registryCount);
 
         // Register all monitoring statistics.
@@ -257,7 +261,6 @@ public class EurekaBootStrap implements ServletContextListener {
     }
 
     /**
-     * 生成同级节点对象 针对 eurekaServer 应该是代表往一个注册中心发送的请求 会传播到所有的 eurekaServer 上
      * @param registry
      * @param eurekaServerConfig
      * @param eurekaClientConfig

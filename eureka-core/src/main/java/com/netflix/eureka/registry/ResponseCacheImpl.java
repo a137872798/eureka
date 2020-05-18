@@ -72,9 +72,7 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * @author Karthik Ranganathan, Greg Kim
- * 针对http 请求的响应缓存对象  像是维护了一个服务列表
- * 未缓存的数据是 原始数据 也就是 apps  而一级缓存保存的是 加工过的 (通过codec 加工成json or xml) 二级缓存是只读缓存 减小读写缓存的访问压力
- * 缺点是 会增大 获取到 无效服务实例的概率 配合 重试机制 实现高可用
+ * 针对响应结果做了缓存  首先考虑一点这里是在认为针对大多数请求 每次响应的数据中有很多可能重复的地方 所以选择通过该类来提高性能 减少GC
  */
 public class ResponseCacheImpl implements ResponseCache {
 
@@ -89,6 +87,10 @@ public class ResponseCacheImpl implements ResponseCache {
 
     private static final String EMPTY_PAYLOAD = "";
     private final java.util.Timer timer = new java.util.Timer("Eureka-CacheFillTimer", true);
+
+    /**
+     * 每当获取一次增量数据时 会增加对应的值  就是版本号的概念  避免ABA?
+     */
     private final AtomicLong versionDelta = new AtomicLong(0);
     private final AtomicLong versionDeltaWithRegions = new AtomicLong(0);
 
@@ -106,7 +108,7 @@ public class ResponseCacheImpl implements ResponseCache {
      * requested by clients, we use this mapping to get all the keys with regions to be invalidated.
      * If we do not do this, any cached user requests containing region keys will not be invalidated and will stick
      * around till expiry. Github issue: https://github.com/Netflix/eureka/issues/118
-     * 该对象 代表 一个 简略的key （不携带region信息的） 下会维护多个相关且携带 region 的 key 当删除时 可以同时指定key value 删除确定的键值对
+     * 该对象存储的是 Key的映射关系  （某个不包含region的key 以及与它信息相同的某个region的key  通过这些key可以从缓存中快速定位到Value）
      */
     private final Multimap<Key, Key> regionSpecificKeys =
             Multimaps.newListMultimap(new ConcurrentHashMap<Key, Collection<Key>>(), new Supplier<List<Key>>() {
@@ -117,12 +119,12 @@ public class ResponseCacheImpl implements ResponseCache {
             });
 
     /**
-     * 只读 缓存对象
+     * 该容器专门负责读取数据    每次清理缓存的时候 只会清理 readWriteCacheMap 内部的数据 那么此时 readOnlyCacheMap 就可能存在脏数据
      */
     private final ConcurrentMap<Key, Value> readOnlyCacheMap = new ConcurrentHashMap<Key, Value>();
 
     /**
-     * 允许读写的缓存对象 使用了google 的缓存容器
+     * 谷歌的并发容器 用于存储数据
      */
     private final LoadingCache<Key, Value> readWriteCacheMap;
     /**
@@ -143,7 +145,6 @@ public class ResponseCacheImpl implements ResponseCache {
     private final ServerCodecs serverCodecs;
 
     /**
-     * 通过 服务器配置 服务器编解码器 和 注册 中心来初始化
      * @param serverConfig
      * @param serverCodecs
      * @param registry
@@ -167,34 +168,28 @@ public class ResponseCacheImpl implements ResponseCache {
                         .removalListener(new RemovalListener<Key, Value>() {
                             @Override
                             public void onRemoval(RemovalNotification<Key, Value> notification) {
-                                // 被移除的缓存键    为什么要 额外维护一个缓存呢???
                                 Key removedKey = notification.getKey();
                                 // 缓存键中存在 地区信息
                                 if (removedKey.hasRegions()) {
                                     // copy 一个不携带 region 的 缓存键
                                     Key cloneWithNoRegions = removedKey.cloneWithoutRegions();
-                                    // 因为 该map 对象是 Multimap 代表 一个key 会同时维护多个 value 这里必须同时指定键值对 才能正确删除
-                                    // 这里设置回调对象 也就是在 readWriteCacheMap 移除过期数据时  清除 Multimap中的关联数据
+                                    // 从相关容器中移除数据
                                     regionSpecificKeys.remove(cloneWithNoRegions, removedKey);
                                 }
                             }
                         })
-                        // 这个指的是 当没有从缓存中获取到数据时 调用该方法 生成缓存数据吗
+                        // 该方法应该是指定的key还不存在时 生成value的逻辑
                         .build(new CacheLoader<Key, Value>() {
                             /**
-                             * 使用缓存键  也就是Key 去生成数据 在不同场景下 会传入不同的 KeyEntitiy 也就是 Applicaiton (获取一般应用)
-                             * VIP (获取vip 应用)
                              * @param key
                              * @return
                              * @throws Exception
                              */
                             @Override
                             public Value load(Key key) throws Exception {
-                                // 直接输入 vipaddress 获取数据时 是没有region 信息的 也就是默认情况下是没有指定要获取哪个 region的数据的
+                                // key 如果存在region 那么就在 regionSpecificKeys 额外维护一份数据
                                 if (key.hasRegions()) {
-                                    // 如果有区域信息 就保存到 regionSpecificKeys 中
                                     Key cloneWithNoRegions = key.cloneWithoutRegions();
-                                    // 这个存起来有什么意义吗
                                     regionSpecificKeys.put(cloneWithNoRegions, key);
                                 }
                                 // 通过 key 生成 value
@@ -203,9 +198,8 @@ public class ResponseCacheImpl implements ResponseCache {
                             }
                         });
 
-        // 如果允许使用 readOnlyResponseCache
+        // 如果允许使用 readOnlyResponseCache  那么需要定期将写容器的数据转移到读容器  相当于一个快照 这样的好处就是降低单容器的读写冲突
         if (shouldUseReadOnlyResponseCache) {
-            // getCacheUpdateTask() 方法会返回一个 具备同步 readOnly 中数据 与 readWrite 数据的任务
             timer.schedule(getCacheUpdateTask(),
                     new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
                             + responseCacheUpdateIntervalMs),
@@ -221,7 +215,7 @@ public class ResponseCacheImpl implements ResponseCache {
     }
 
     /**
-     * 获取更新缓存的任务对象
+     * 该对象负责同步读写容器与只读容器的数据
      * @return
      */
     private TimerTask getCacheUpdateTask() {
@@ -236,7 +230,6 @@ public class ResponseCacheImpl implements ResponseCache {
                                 key.getEntityType(), key.getName(), key.getVersion(), key.getType());
                     }
                     try {
-                        // 将版本设置到 当前线程中 与线程绑定
                         CurrentRequestVersion.set(key.getVersion());
                         // 使用 readWrite中的数据 去 同步readOnly中的数据
                         Value cacheValue = readWriteCacheMap.get(key);
@@ -271,6 +264,12 @@ public class ResponseCacheImpl implements ResponseCache {
         return get(key, shouldUseReadOnlyResponseCache);
     }
 
+    /**
+     * 当使用 readOnlyResponseCache 时 就可以减小读写容器的锁竞争
+     * @param key
+     * @param useReadOnlyCache
+     * @return
+     */
     @VisibleForTesting
     String get(final Key key, boolean useReadOnlyCache) {
         // 从缓存中找到 对应的Value
@@ -312,21 +311,22 @@ public class ResponseCacheImpl implements ResponseCache {
      * Invalidate the cache of a particular application.
      *
      * @param appName the application name of the application.
-     *                这里没有针对某个region 进行移除 而是按照 app 的级别 或者按照 vip地址 和 securevip 地址
+     *                标记缓存中某个数据变成无效数据
      */
     @Override
     public void invalidate(String appName, @Nullable String vipAddress, @Nullable String secureVipAddress) {
         for (Key.KeyType type : Key.KeyType.values()) {
             for (Version v : Version.values()) {
                 invalidate(
-                        // ALL_APPS 和 ALL_APPS_DELTA 是2种特殊的app 这里使得某些数据无效
-                        new Key(Key.EntityType.Application, appName, type, v, EurekaAccept.full),
+                        // 这样剩下的就是 其他appName 对应的缓存信息
+                        new Key(Key.EntityType.Application, appName, type, v, EurekaAccept.full),   // 先清除匹配appName的缓存
                         new Key(Key.EntityType.Application, appName, type, v, EurekaAccept.compact),
-                        new Key(Key.EntityType.Application, ALL_APPS, type, v, EurekaAccept.full),
+                        new Key(Key.EntityType.Application, ALL_APPS, type, v, EurekaAccept.full),   // 既然某个app的数据无效了 那么自然要进行全局性清理
                         new Key(Key.EntityType.Application, ALL_APPS, type, v, EurekaAccept.compact),
                         new Key(Key.EntityType.Application, ALL_APPS_DELTA, type, v, EurekaAccept.full),
                         new Key(Key.EntityType.Application, ALL_APPS_DELTA, type, v, EurekaAccept.compact)
                 );
+                // 将指定地址的也标记成无效
                 if (null != vipAddress) {
                     invalidate(new Key(Key.EntityType.VIP, vipAddress, type, v, EurekaAccept.full));
                 }
@@ -349,7 +349,7 @@ public class ResponseCacheImpl implements ResponseCache {
                     key.getEntityType(), key.getName(), key.getVersion(), key.getType(), key.getEurekaAccept());
 
             readWriteCacheMap.invalidate(key);
-            // 当未指定region的某个缓存失效了 下面所有 相关的携带region的也都会失效
+            // 如果某个key 没有限定region范围 那么要将限定范围的key 也同时设置成无效
             Collection<Key> keysWithRegions = regionSpecificKeys.get(key);
             if (null != keysWithRegions && !keysWithRegions.isEmpty()) {
                 for (Key keysWithRegion : keysWithRegions) {
@@ -366,6 +366,7 @@ public class ResponseCacheImpl implements ResponseCache {
      * Gets the version number of the cached data.
      *
      * @return teh version number of the cached data.
+     * 每当生成一次增量数据缓存时 就+1 就像版本号一样
      */
     @Override
     public AtomicLong getVersionDelta() {
@@ -418,19 +419,16 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /**
      * Get the payload in both compressed and uncompressed form.
-     * 这里数据会有短暂的延时啊 readOnly 可能还没有与 readWrite 同步 这种情况下 就会去 wr中获取数据并主动设置到 ro 中
      */
     @VisibleForTesting
     Value getValue(final Key key, boolean useReadOnlyCache) {
         Value payload = null;
         try {
             if (useReadOnlyCache) {
-                // 因为 ro 存在 延迟 所以可能获取到错误的服务实例
                 final Value currentPayload = readOnlyCacheMap.get(key);
                 if (currentPayload != null) {
                     payload = currentPayload;
                 } else {
-                    // 从一级缓存中获取 并设置到 二级缓存中  如果 rw 中原来没有数据 就会 调用缓存对象的 build() 方法 生成缓存
                     payload = readWriteCacheMap.get(key);
                     readOnlyCacheMap.put(key, payload);
                 }
@@ -446,14 +444,14 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /**
      * Generate pay load with both JSON and XML formats for all applications.
-     * 根据key中的编码信息 和 apps 来生成 需要被缓存的数据
+     * 此时已经通过key中的关键信息获取到对应的所有应用实例了
      */
     private String getPayLoad(Key key, Applications apps) {
         // 获取对应的编码器
         EncoderWrapper encoderWrapper = serverCodecs.getEncoder(key.getType(), key.getEurekaAccept());
         String result;
         try {
-            // 对数据进行编码并返回 这是返回的可能是已经压缩过的 或者 未压缩的
+            // 根据相关信息返回匹配的编码器  并对app进行编码
             result = encoderWrapper.encode(apps);
         } catch (Exception e) {
             logger.error("Failed to encode the payload for all apps", e);
@@ -485,34 +483,32 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /*
      * Generate pay load for the given key.
-     * 生成 需要被缓存的对象 Value 对象被创建后会自动生成 被压缩的数据
+     * 基于传入的key  生成数据的方法
      */
     private Value generatePayload(Key key) {
         Stopwatch tracer = null;
         try {
             String payload;
-            // 获取被缓存的对象
             switch (key.getEntityType()) {
                 // 代表需要获取的是 普通的应用实例对象
                 case Application:
                     // 获取 region信息
                     boolean isRemoteRegionRequested = key.hasRegions();
 
-                    // 如果是 针对全部应用的  name 针对 VIP SVIP 就是 地址 针对 application 可能就是应用名 然后如果是 特殊的应用名 比如 ALL_APPS
-                    // 就是返回全部应用
+                    // 代表本次要生成的缓存数据是所有的APP
                     if (ALL_APPS.equals(key.getName())) {
                         // 判断是否有指定 region
                         if (isRemoteRegionRequested) {
                             // 启动对应的秒表
                             tracer = serializeAllAppsWithRemoteRegionTimer.start();
-                            // 根据指定的region 获取 application  region 可以为 null 就是只返回本region  否则还同时从remoteRegion 中获取数据
+                            // 通过本节点获取 所属的 eureka-server 集群下所有节点记录的 APP 信息
                             payload = getPayLoad(key, registry.getApplicationsFromMultipleRegions(key.getRegions()));
                         } else {
                             tracer = serializeAllAppsTimer.start();
-                            // 未指定region情况下 直接返回 本region 应用  apps 是不能直接被使用的 而要转换成payload才能直接使用
+                            // 在没有region限制的情况下 获取所有的apps
                             payload = getPayLoad(key, registry.getApplications());
                         }
-                    // 特殊应用
+                    // 代表只获取增量数据
                     } else if (ALL_APPS_DELTA.equals(key.getName())) {
                         if (isRemoteRegionRequested) {
                             tracer = serializeDeltaAppsWithRemoteRegionTimer.start();
@@ -526,8 +522,8 @@ public class ResponseCacheImpl implements ResponseCache {
                             versionDeltaLegacy.incrementAndGet();
                             payload = getPayLoad(key, registry.getApplicationDeltas());
                         }
+                    // 默认 情况下使用key.name拉取应用
                     } else {
-                        // 默认情况使用指定的 key registry中获取 application
                         tracer = serializeOneApptimer.start();
                         payload = getPayLoad(key, registry.getApplication(key.getName()));
                     }
@@ -553,9 +549,9 @@ public class ResponseCacheImpl implements ResponseCache {
     }
 
     /**
-     * 获取 vip applications的信息
+     * 获取VIP实例信息
      * @param key
-     * @param registry
+     * @param registry  注册中心实例
      * @return
      */
     private static Applications getApplicationsForVip(Key key, AbstractInstanceRegistry registry) {
@@ -566,7 +562,7 @@ public class ResponseCacheImpl implements ResponseCache {
         Applications toReturn = new Applications();
         // 从传入的注册中心获取全部的 应用
         Applications applications = registry.getApplications();
-        // Applications 是一个抽象概念 内部的 application 列表是通过 registeredApplications来称呼的
+        // 返回一组副本  避免修改到源数据
         for (Application application : applications.getRegisteredApplications()) {
             Application appToAdd = null;
             // 获取所有服务实例对象
@@ -609,22 +605,22 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /**
      * The class that stores payload in both compressed and uncompressed form.
-     * 同时以 压缩 和未压缩 方式保存数据
-     *
+     * 当基于缓存键 从registry获取到相关信息后 信息会被编码成字符串 然后保存在这个对象内
      */
     public class Value {
 
         /**
-         * 负荷对象
+         * 原始数据
          */
         private final String payload;
+        // 压缩后的数据
         private byte[] gzipped;
 
         public Value(String payload) {
             this.payload = payload;
             // 代表 维护的不是 空数据
             if (!EMPTY_PAYLOAD.equals(payload)) {
-                // 开始计算时间
+                // 生成压缩数据
                 Stopwatch tracer = compressPayloadTimer.start();
                 try {
                     ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -644,7 +640,6 @@ public class ResponseCacheImpl implements ResponseCache {
                         tracer.stop();
                     }
                 }
-                // 如果是空数据 gzipped 就不需要处理
             } else {
                 gzipped = null;
             }

@@ -17,6 +17,7 @@ import com.sun.jersey.api.client.filter.ClientFilter;
 
 /**
  * Eureka specific GZIP content filter handler.
+ * 该对象在发送请求前 追加压缩请求头  并在接收到响应数据时尝试解压
  */
 public class DynamicGZIPContentEncodingFilter extends ClientFilter {
 

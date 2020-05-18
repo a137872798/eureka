@@ -36,7 +36,7 @@ import javax.inject.Singleton;
  * local server such as the registry.
  *
  * @author David Liu
- * eureka上下文对象 在 EurekaBootstrap 启动时 会创建一系列对象并生成该对象来管理他们
+ * 该对象负责管理一系列 eureka组件
  */
 @Singleton
 public class DefaultEurekaServerContext implements EurekaServerContext {
@@ -59,7 +59,7 @@ public class DefaultEurekaServerContext implements EurekaServerContext {
      */
     private final PeerEurekaNodes peerEurekaNodes;
     /**
-     * 实例管理对象
+     * 实例管理对象   内部的instance 是本节点对应的实例
      */
     private final ApplicationInfoManager applicationInfoManager;
 
@@ -80,11 +80,11 @@ public class DefaultEurekaServerContext implements EurekaServerContext {
     @Override
     public void initialize() {
         logger.info("Initializing ...");
-        // 该对象初始化时 启动下面管理的对象
-        // peerEurekaNodes 在启动时 会定期去加载配置文件中的 serviceUrl 信息 并生成 List<Node> 对象
+        // nodes.start() 就是从配置文件中定期拉取本region下所有zone 并存储到容器中  (同时将zone 转换成node 对象)
         peerEurekaNodes.start();
         try {
-            // 使用生成的 nodes 对象去初始化 eurekaServer 对象
+            // 使用生成的 nodes 对象去初始化 eurekaServer 对象   这样当往本节点注册中心发送请求时 就会同步到其他节点
+            // 同时从配置文件中获取 其他region下的注册中心 并生成client 用于访问  当本集群找不到某个应用时根据配置允许往其他region读取
             registry.init(peerEurekaNodes);
         } catch (Exception e) {
             throw new RuntimeException(e);

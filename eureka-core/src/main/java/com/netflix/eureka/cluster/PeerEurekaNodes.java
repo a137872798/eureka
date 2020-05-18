@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
  * Helper class to manage lifecycle of a collection of {@link PeerEurekaNode}s.
  *
  * @author Tomasz Bak
- * 代表 所有的 eurekaServer 同级节点
+ * 该对象负责管理 所有PeerEurekaNode
  */
 @Singleton
 public class PeerEurekaNodes {
@@ -40,17 +40,24 @@ public class PeerEurekaNodes {
      * 具备将请求发往所有同级节点的注册中心
      */
     protected final PeerAwareInstanceRegistry registry;
+
+    // 每个eureka启动时 即会将自身作为client 也会作为server
+
     protected final EurekaServerConfig serverConfig;
     protected final EurekaClientConfig clientConfig;
+    // 服务端编解码器
     protected final ServerCodecs serverCodecs;
+    // 该对象内 包含一个instance 对应本节点作为 eureka-client的实例
     private final ApplicationInfoManager applicationInfoManager;
 
+    // Nodes 本身代表某个eureka-server 集群内的所有节点
+
     /**
-     * 内部实际维护的 一个 node 列表
+     * 内部实际维护的 一个 node 列表  不包含本节点
      */
     private volatile List<PeerEurekaNode> peerEurekaNodes = Collections.emptyList();
     /**
-     * 每个 eurekaNode 对应的 serviceUrl
+     * 每个 eurekaNode 对应的 serviceUrl   不包含本节点地址
      */
     private volatile Set<String> peerEurekaNodeUrls = Collections.emptySet();
 
@@ -68,8 +75,8 @@ public class PeerEurekaNodes {
             EurekaServerConfig serverConfig,    // 本机作为 eurekaServer 的配置对象
             EurekaClientConfig clientConfig,    // 本机作为 eurekaClient 的配置独享
             ServerCodecs serverCodecs,          // 编解码器
-            ApplicationInfoManager applicationInfoManager  // 实例应用管理对象 在该对象首次被初始化时 内部的静态字段就会被赋值 之后每次调用 getInstance 都是返回同一个对象
-            ) {
+            ApplicationInfoManager applicationInfoManager
+    ) {
         this.registry = registry;
         this.serverConfig = serverConfig;
         this.clientConfig = clientConfig;
@@ -86,7 +93,7 @@ public class PeerEurekaNodes {
     }
 
     /**
-     * 默认值为 -1
+     * 代表该对象认为集群内有多少能通信的节点 才认为是健康状态  (基于AP 的实现 节点越多就越不容易发生数据丢失)
      * @return
      */
     public int getMinNumberOfAvailablePeers() {
@@ -105,14 +112,16 @@ public class PeerEurekaNodes {
                 }
         );
         try {
-            // 通过维护的所有对端节点url 更新节点信息  对端节点url 应该是从 config中获取的
-            // 并生成对应的节点列表
+            // 首次先从配置文件中读取本集群 (同一个region下所有实例认为在同一个集群  同时一个region下又有多个zone  默认情况下会采用地区亲和特性
+            // 返回的一组url列表 会将同一zone的serviceUrl放在前面)
+            // 注意这里node 中不包含本地址
             updatePeerEurekaNodes(resolvePeerUrls());
+
+            // 该任务会定期拉取数据并更新节点
             Runnable peersUpdateTask = new Runnable() {
                 @Override
                 public void run() {
                     try {
-                        // 从配置文件中获取最新的 serviceUrl 信息设置到 node 中
                         updatePeerEurekaNodes(resolvePeerUrls());
                     } catch (Throwable e) {
                         logger.error("Cannot update the replica Nodes", e);
@@ -154,15 +163,15 @@ public class PeerEurekaNodes {
      * Resolve peer URLs.
      *
      * @return peer URLs with node's own URL filtered out
-     * 解析其他节点的 url
+     * 找到集群内其他eureka-server的地址
      */
     protected List<String> resolvePeerUrls() {
-        // 这个应该是本机实例信息 InstanceInfo
+        // 获取本节点对应的instance
         InstanceInfo myInfo = applicationInfoManager.getInfo();
-        // 根据 region 返回下面所有的 zone  如果找不到 会默认使用 defaultZone 去查找属性值  看来针对region zone 有实际含义的就代表是 AWS
-        // 这里默认会返回多个zone 中的第一个
+
+        // 默认使用该region下第一个zone
         String zone = InstanceInfo.getZone(clientConfig.getAvailabilityZones(clientConfig.getRegion()), myInfo);
-        // 获取注册中心的路径 如果只有一个 zone 就返回该zone 的全部 url 否则 返回2个 zone 间所有url  第二个zone 代表多个可用zone 的最后一个
+        // 找到该region下所有 eureka-server的地址  如果采用zone亲和策略 那么前面的url都是同一zone的
         List<String> replicaUrls = EndpointUtils
                 .getDiscoveryServiceUrls(clientConfig, zone, new EndpointUtils.InstanceInfoBasedUrlRandomizer(myInfo));
 
@@ -175,7 +184,6 @@ public class PeerEurekaNodes {
                 idx++;
             }
         }
-        // 仅返回 其他注册中心的url  注册中心url 为自身的都要移除掉
         return replicaUrls;
     }
 
@@ -184,7 +192,7 @@ public class PeerEurekaNodes {
      * create new ones.
      *
      * @param newPeerUrls peer node URLs; this collection should have local node's URL filtered out
-     *                    传入 其他注册中心的 url 并尝试更新节点
+     *                    刷新集群内服务列表 注意不包含本节点地址
      */
     protected void updatePeerEurekaNodes(List<String> newPeerUrls) {
         if (newPeerUrls.isEmpty()) {
@@ -192,9 +200,10 @@ public class PeerEurekaNodes {
             return;
         }
 
-        // 代表 本次url中不存在 的其他url 应该被移除
+        // 找到本次不存在的地址 它们将会被移除
         Set<String> toShutdown = new HashSet<>(peerEurekaNodeUrls);
         toShutdown.removeAll(newPeerUrls);
+
         // 代表本次url中 应该增加的部分  第一次调用该方法就是将全部url 设置到 toAdd中
         Set<String> toAdd = new HashSet<>(newPeerUrls);
         toAdd.removeAll(peerEurekaNodeUrls);
@@ -238,7 +247,7 @@ public class PeerEurekaNodes {
     }
 
     /**
-     * 通过 peerNode url 拉取节点信息
+     * 将同一region下 其他zone转换成一个node
      * @param peerEurekaNodeUrl
      * @return
      */
@@ -250,7 +259,7 @@ public class PeerEurekaNodes {
         if (targetHost == null) {
             targetHost = "host";
         }
-        // 创建对端节点对象 针对该对象发起的请求 会进入到 任务池中 并且 会发送给所有peerNode
+        // 注意 所有PeerEurekaNode 共用一个registry
         return new PeerEurekaNode(registry, targetHost, peerEurekaNodeUrl, replicationClient, serverConfig);
     }
 

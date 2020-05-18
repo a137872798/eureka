@@ -249,28 +249,27 @@ public class Application {
             // 这里生成一个 副本对象就是不希望 修改该容器时 影响到源数据
             instanceInfoList = new ArrayList<InstanceInfo>(instances);
         }
-        // 如果设置了 根据 region 设置index  因为clientConfig 中维护了 zone 和 region的关系    regionChecker 需要借助它
+
         boolean remoteIndexingActive = indexByRemoteRegions && null != instanceRegionChecker && null != clientConfig
                 && null != remoteRegionsRegistry;
         // 后面的标识 代表 只需要 status为 up的服务实例
         if (remoteIndexingActive || filterUpInstances) {
+            // 遍历提供本app的所有实例对象
             Iterator<InstanceInfo> it = instanceInfoList.iterator();
             while (it.hasNext()) {
                 InstanceInfo instanceInfo = it.next();
                 // status 不是 up 的就要移除
                 if (filterUpInstances && InstanceStatus.UP != instanceInfo.getStatus()) {
                     it.remove();
-                    // 这个是代表是否需要将本地实例 转移到给定的 remoteRegionsRegistry 容器中
                 } else if (remoteIndexingActive) {
-                    //instanceInfo 中不存在 dataCenter 就返回 localRegion 也就是本机 region  一般是不存在数据中心的
+                    // 获取目标实例的地区
                     String instanceRegion = instanceRegionChecker.getInstanceRegion(instanceInfo);
                     // 如果获取到的不是本地 region
                     if (!instanceRegionChecker.isLocalRegion(instanceRegion)) {
-                        // 代表是 远端的region 那么获取远端region 的全部 applicaiton
+                        // 将结果存放到远端map中
                         Applications appsForRemoteRegion = remoteRegionsRegistry.get(instanceRegion);
                         if (null == appsForRemoteRegion) {
                             appsForRemoteRegion = new Applications();
-                            // 不存在就设置一个空对象
                             remoteRegionsRegistry.put(instanceRegion, appsForRemoteRegion);
                         }
 
@@ -283,9 +282,8 @@ public class Application {
                             appsForRemoteRegion.addApplication(remoteApp);
                         }
 
-                        // 这里代表的是 从 instances 中转换到了remoteRegionsRegistry 中
                         remoteApp.addInstance(instanceInfo);
-                        // 这种情况下并不是 数据无效 所以 markAsDirty 为 false
+                        // 将实例移动到 remoteRegionsRegistry后 需要从本app中移除 该实例 同时不设置成待更新 （dirty）
                         this.removeInstance(instanceInfo, false);
                         it.remove();
                     }
@@ -293,7 +291,7 @@ public class Application {
             }
 
         }
-        // 将数据打乱后 设置到 容器中
+        // 正常情况不进行过滤 只是打乱顺序后返回
         Collections.shuffle(instanceInfoList, shuffleRandom);
         this.shuffledInstances.set(instanceInfoList);
     }

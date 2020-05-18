@@ -74,7 +74,7 @@ class TrafficShaper {
      * @return
      */
     long transmissionDelay() {
-        // 每次 获取过一次 延迟时间  就会将下面的某个属性重置为-1  也就是如果没有发生拥塞 这里就会返回0 不需要阻塞
+        // 以下2个参数为-1 代表当前服务器端状态良好 不需要作延时调用 而一旦对端处理出现了异常 那么本次发起请求就会有一定的延时
         if (lastCongestionError == -1 && lastNetworkFailure == -1) {
             return 0;
         }
@@ -85,7 +85,7 @@ class TrafficShaper {
         if (lastCongestionError != -1) {
             // 距离上次已经过了多少时间
             long congestionDelay = now - lastCongestionError;
-            // 小于延迟时间时  返回差值 代表还需要延迟这么旧
+            // 小于延迟时间时  返回差值
             if (congestionDelay >= 0 && congestionDelay < congestionRetryDelayMs) {
                 return congestionRetryDelayMs - congestionDelay;
             }

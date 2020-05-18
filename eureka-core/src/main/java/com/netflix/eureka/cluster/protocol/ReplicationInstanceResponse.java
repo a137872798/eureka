@@ -6,7 +6,7 @@ import com.netflix.appinfo.InstanceInfo;
 
 /**
  * The jersey resource class that generates the replication indivdiual response.
- * 复制任务返回的 结果
+ * 针对某个复制请求的响应结果
  */
 public class ReplicationInstanceResponse {
 

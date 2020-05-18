@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory;
 import static com.netflix.eureka.cluster.protocol.ReplicationInstance.ReplicationInstanceBuilder.aReplicationInstance;
 
 /**
- * 重复任务处理对象
  * @author Tomasz Bak
  */
 class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
@@ -27,7 +26,7 @@ class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
     private static final Logger logger = LoggerFactory.getLogger(ReplicationTaskProcessor.class);
 
     /**
-     * 发送重复任务请求的 client 对象
+     * 用于发送复制请求的client
      */
     private final HttpReplicationClient replicationClient;
 
@@ -53,7 +52,7 @@ class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
     @Override
     public ProcessingResult process(ReplicationTask task) {
         try {
-            // 该人物对象本身就 封装了发送请求的逻辑
+            // 任务中已经定义了 目标地址等信息
             EurekaHttpResponse<?> httpResponse = task.execute();
             int statusCode = httpResponse.getStatusCode();
             Object entity = httpResponse.getEntity();
@@ -68,7 +67,7 @@ class ReplicationTaskProcessor implements TaskProcessor<ReplicationTask> {
                 // 繁忙 之后会生成一个延迟
                 return ProcessingResult.Congestion;
             } else {
-                // 任务失败也会生成延迟
+                // 任务失败触发对应的回调
                 task.handleFailure(statusCode, entity);
                 return ProcessingResult.PermanentError;
             }

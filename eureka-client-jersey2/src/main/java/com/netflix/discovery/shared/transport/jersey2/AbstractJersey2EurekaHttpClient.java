@@ -174,7 +174,6 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
                     // queryParam 应该是在 url 上追加参数吧  要把当前 服务实例的 status 和 最后改动时间 也就是 (dirtyTimestamp) 发送过去
                     .queryParam("status", info.getStatus().toString())
                     .queryParam("lastDirtyTimestamp", info.getLastDirtyTimestamp().toString());
-            // 如果要 修改为某个状态 就修改
             if (overriddenStatus != null) {
                 webResource = webResource.queryParam("overriddenstatus", overriddenStatus.name());
             }
@@ -330,13 +329,13 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         Response response = null;
         try {
             WebTarget webTarget = jerseyClient.target(serviceUrl).path(urlPath);
-            // regions 可以为空
+            // regions 代表将会查询哪些region下的应用
             if (regions != null && regions.length > 0) {
                 webTarget = webTarget.queryParam("regions", StringUtil.join(regions));
             }
             Builder requestBuilder = webTarget.request();
-            addExtraProperties(requestBuilder);
-            addExtraHeaders(requestBuilder);
+            addExtraProperties(requestBuilder); // 追加用户名和密码 避免对端需要权限认证
+            addExtraHeaders(requestBuilder);  // 追加额外的请求头
             response = requestBuilder.accept(MediaType.APPLICATION_JSON_TYPE).get();
 
             Applications applications = null;

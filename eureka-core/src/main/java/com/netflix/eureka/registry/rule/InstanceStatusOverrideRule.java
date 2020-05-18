@@ -22,6 +22,7 @@ public interface InstanceStatusOverrideRule {
      * @param existingLease Does the instance have an existing lease already? If so let's consider that.
      * @param isReplication When overriding consider if we are under a replication mode from other servers.
      * @return A result with whether we matched and what we propose the status to be overriden to.
+     * 读取某个使用实例以及他的续约信息来生成  状态
      */
     StatusOverrideResult apply(final InstanceInfo instanceInfo,
                                final Lease<InstanceInfo> existingLease,

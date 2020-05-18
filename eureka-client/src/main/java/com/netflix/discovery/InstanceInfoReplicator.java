@@ -135,6 +135,7 @@ class InstanceInfoReplicator implements Runnable {
     }
 
     /**
+     * 当感知到本节点状态 相较eureka-server 上状态不同 则触发该方法
      * @return
      */
     public boolean onDemandUpdate() {

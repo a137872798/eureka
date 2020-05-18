@@ -72,7 +72,7 @@ public interface EurekaHttpClient {
     EurekaHttpResponse<Applications> getDelta(String... regions);
 
     /**
-     * 获取 vip applications
+     * 访问vip地址 并获取 applications
      * @param vipAddress
      * @param regions
      * @return

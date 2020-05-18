@@ -158,12 +158,12 @@ public class ApplicationResource {
      * @param isReplication
      *            a header parameter containing information whether this is
      *            replicated from other nodes.
-     *            通过POST 方式进行请求 允许接收 application/json 以及 application/xml 格式
+     *            这个就是注册请求  注册某个实例
      */
     @POST
     @Consumes({"application/json", "application/xml"})
     public Response addInstance(InstanceInfo info,
-                                //从请求头中获取 参数 判断是否是 复制 这里的复制指的是什么???
+                                // 判断该请求是否需要转发到其他节点上
                                 @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication) {
         logger.debug("Registering instance {} (replication={})", info.getId(), isReplication);
         // validate that the instanceinfo contains all the necessary required fields
@@ -206,9 +206,8 @@ public class ApplicationResource {
             }
         }
 
-        //这是 eurekaServer ??? 这里接收了 eurekaClient 发来的请求
+        // 接收其他节点发送的注册请求
         registry.register(info, "true".equals(isReplication));
-        //将状态码204 返回 那么 如果出了异常是在哪里处理呢
         return Response.status(204).build();  // 204 to be backwards compatible
     }
 

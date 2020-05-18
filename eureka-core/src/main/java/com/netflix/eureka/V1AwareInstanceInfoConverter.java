@@ -50,7 +50,6 @@ public class V1AwareInstanceInfoConverter extends InstanceInfoConverter {
                     status = InstanceStatus.DOWN;
                     break;
             }
-            // 如果没有 status 默认返回 DOWN
             return status.name();
         } else {
             return super.getStatus(info);

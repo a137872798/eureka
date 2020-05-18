@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  *
  * @author Karthik Ranganathan, Greg Kim
- *  应该是 代表 会将 针对某个节点的操作 同时作用到多个节点上  服务端 特有
+ * 代表eureka-server 集群中的某个节点
  */
 public class PeerEurekaNode {
 
@@ -91,21 +91,17 @@ public class PeerEurekaNode {
      * 服务器配置对象  就代表该节点 描述的是一个 注册中心对象
      */
     private final EurekaServerConfig config;
-    /**
-     * 最大处理延迟???   就是针对添加到 任务池中的任务 这个应该是默认的任务过期时间 超时后 该任务不会被执行
-     */
+
     private final long maxProcessingDelayMs;
     /**
-     * 注册中心
+     * 注册中心   该对象被所有node 共享
      */
     private final PeerAwareInstanceRegistry registry;
     /**
      * 目标主机
      */
     private final String targetHost;
-    /**
-     * 用于 复制的 client  可能 peer 代表这些节点需要同时被更新
-     */
+
     private final HttpReplicationClient replicationClient;
 
     /**
@@ -125,7 +121,7 @@ public class PeerEurekaNode {
                                      HttpReplicationClient replicationClient, EurekaServerConfig config,
                                      int batchSize, long maxBatchingDelayMs,
                                      long retrySleepTimeMs, long serverUnavailableSleepTimeMs) {
-        // 代表能将请求 发送到其他node 的registry 对象
+        // 某个eureka下所有节点共用一个registry 也就是注册中心 同时该对象的实现本身具备将某一请求发往集群内所有节点的能力
         this.registry = registry;
         // 目标主机
         this.targetHost = targetHost;
@@ -138,7 +134,7 @@ public class PeerEurekaNode {
         this.maxProcessingDelayMs = config.getMaxTimeForReplication();
 
         String batcherName = getBatcherName();
-        // targetHost 作为了一个id 来标识 peer
+        // 这里将client 包装成一个processor对象 也就是处理 replication任务 就是通过client向目标地址发送请求
         ReplicationTaskProcessor taskProcessor = new ReplicationTaskProcessor(targetHost, replicationClient);
         // 创建一个 批量处理任务的对象
         this.batchingDispatcher = TaskDispatchers.createBatchingTaskDispatcher(
@@ -171,7 +167,8 @@ public class PeerEurekaNode {
      *            the instance information {@link InstanceInfo} of any instance
      *            that is send to this instance.
      * @throws Exception
-     * 接受到注册任务时 要同步到所有同级节点
+     * 接受到注册任务时 要同步到所有同级节点  这里采用异步处理  使得eureka-client的注册请求能够快速返回 毕竟不同于CP 只要集群中成功注册一个
+     * 就认为成功了   eureka-client端如果往某个节点发送失败了  是自带重试机制的
      */
     public void register(final InstanceInfo info) throws Exception {
         // 获取续约时间 毫秒数
@@ -180,8 +177,10 @@ public class PeerEurekaNode {
                 // 生成任务id  该对象具备相同任务id 会 覆盖掉旧任务的特性
                 taskId("register", info),
                 // replicateInstanceInfo 代表是否要将该 实例信息复制到其他节点
+                // lambda中重写的是 execute()
                 new InstanceReplicationTask(targetHost, Action.Register, info, null, true) {
                     // 该任务的 核心方法 就是委托给 执行复制任务的client 调用对用的 api
+                    // replicationClient 该client的特性就是 在写res时 会追加一个 isReplication = true
                     public EurekaHttpResponse<Void> execute() {
                         return replicationClient.register(info);
                     }
@@ -206,7 +205,7 @@ public class PeerEurekaNode {
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
         batchingDispatcher.process(
                 taskId("cancel", appName, id),
-                // 复制cancel任务
+                // 复制cancel任务  该请求不需要同步到其他节点
                 new InstanceReplicationTask(targetHost, Action.Cancel, appName, id) {
                     /**
                      * 委托执行关闭任务
@@ -254,14 +253,13 @@ public class PeerEurekaNode {
     public void heartbeat(final String appName, final String id,
                           final InstanceInfo info, final InstanceStatus overriddenStatus,
                           boolean primeConnection) throws Throwable {
-        // 如果是 主要连接 ???
+        // 如果是主连接  直接在本线程内完成任务
         if (primeConnection) {
             // We do not care about the result for priming request.
-            // 发送心跳后 不需要在意返回值  而且这里是直接执行 其他请求都是 放到线程池中执行的
             replicationClient.sendHeartBeat(appName, id, info, overriddenStatus);
             return;
         }
-        // 需要使用线程池发送
+        // 非主连接的情况 将任务添加到生产者消费者模型中 通过后面的批处理线程池来执行任务   该任务也不需要同步到其他节点
         ReplicationTask replicationTask = new InstanceReplicationTask(targetHost, Action.Heartbeat, info, overriddenStatus, false) {
             @Override
             public EurekaHttpResponse<InstanceInfo> execute() throws Throwable {
@@ -276,12 +274,11 @@ public class PeerEurekaNode {
                     if (info != null) {
                         logger.warn("{}: cannot find instance id {} and hence replicating the instance with status {}",
                                 getTaskName(), info.getId(), info.getStatus());
-                        // 将该节点注册到同级节点上
+                        // 返回404 代表没有在目标节点(eureka-server) 上找到本实例 那么重新注册
                         register(info);
                     }
-                    // 非404 异常时 判断是否需要 同步时间戳
                 } else if (config.shouldSyncWhenTimestampDiffers()) {
-                    // 心跳检测会返回对端实例信息吗
+                    // 返回的应该时本实例在对端节点的状态
                     InstanceInfo peerInstanceInfo = (InstanceInfo) responseEntity;
                     if (peerInstanceInfo != null) {
                         // 将节点信息注册到注册中心 以及更新状态
@@ -290,6 +287,7 @@ public class PeerEurekaNode {
                 }
             }
         };
+        // 超过续约时间内认为是任务超时
         long expiryTime = System.currentTimeMillis() + getLeaseRenewalOf(info);
         batchingDispatcher.process(taskId("heartbeat", info), replicationTask, expiryTime);
     }
@@ -340,6 +338,7 @@ public class PeerEurekaNode {
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
         batchingDispatcher.process(
                 taskId("statusUpdate", appName, id),
+                // 修改状态的请求不需要同步到所有节点
                 new InstanceReplicationTask(targetHost, Action.StatusUpdate, info, null, false) {
                     @Override
                     public EurekaHttpResponse<Void> execute() {
@@ -359,7 +358,7 @@ public class PeerEurekaNode {
      *            the unique identifier of the instance.
      * @param info
      *            the instance information of the instance.
-     *            删除 覆盖status  （这东西是做什么的???）
+     *            删除 修改的状态
      */
     public void deleteStatusOverride(final String appName, final String id, final InstanceInfo info) {
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
@@ -427,7 +426,8 @@ public class PeerEurekaNode {
      * this node and the peer eureka nodes vary.
      * 同步2个节点间的时间戳
      */
-    private void syncInstancesIfTimestampDiffers(String appName, String id, InstanceInfo info, InstanceInfo infoFromPeer) {
+    private void syncInstancesIfTimestampDiffers(String appName, String id, InstanceInfo info, InstanceInfo infoFromPeer  // 本节点在注册中心的信息
+    ) {
         try {
             if (infoFromPeer != null) {
                 logger.warn("Peer wants us to take the instance information from it, since the timestamp differs,"
@@ -438,7 +438,7 @@ public class PeerEurekaNode {
                     logger.warn("Overridden Status info -id {}, mine {}, peer's {}", id, info.getOverriddenStatus(), infoFromPeer.getOverriddenStatus());
                     registry.storeOverriddenStatusIfRequired(appName, id, infoFromPeer.getOverriddenStatus());
                 }
-                // 将节点注册到 注册中心
+                // 将对端返回的节点信息作修改后重新注册回去
                 registry.register(infoFromPeer, true);
             }
         } catch (Throwable e) {

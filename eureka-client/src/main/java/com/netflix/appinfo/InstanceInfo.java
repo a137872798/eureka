@@ -171,7 +171,7 @@ public class InstanceInfo {
     private volatile DataCenterInfo dataCenterInfo;
     private volatile String hostName;
     /**
-     * 当前实例属于可用状态还是不可用
+     * 默认情况下某个 eureka节点启动时 就将自身标记成可用状态
      */
     private volatile InstanceStatus status = InstanceStatus.UP;
     private volatile InstanceStatus overriddenStatus = InstanceStatus.UNKNOWN;
@@ -1019,7 +1019,7 @@ public class InstanceInfo {
      * client versions (some with the change, some without).
      *
      * @return the unique id.
-     * 延迟 初始化
+     * 获取该应用实例的id
      */
     @JsonIgnore
     public String getId() {
@@ -1355,7 +1355,6 @@ public class InstanceInfo {
      * @param unsetDirtyTimestamp the expected lastDirtyTimestamp to unset.
      */
     public synchronized void unsetIsDirty(long unsetDirtyTimestamp) {
-        // 如果最后dirty 时间 超过了传入的时间就代表在这个时间段 又有别的 变化使得数据又变脏了 这样就不能误改状态
         if (lastDirtyTimestamp <= unsetDirtyTimestamp) {
             isInstanceInfoDirty = false;
         } else {
@@ -1367,6 +1366,7 @@ public class InstanceInfo {
      * return the instances. This flag is used by the discovery clients to
      * identity the discovery server which is coordinating/returning the
      * information.
+     * 代表本实例注册在本节点上搭载的eureka-server上
      */
     public void setIsCoordinatingDiscoveryServer() {
         String instanceId = getId();
